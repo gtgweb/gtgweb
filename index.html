@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Getting Things GNOME dans votre navigateur. PWA CalDAV libre et auto-hébergeable." />
+  <meta name="theme-color" content="#1e1e2e" />
+
+  <title>gtgWeb</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+
+  <!-- Style -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Point de montage unique — tout le DOM est généré par ui.js -->
+  <div id="app" role="main"></div>
+
+  <!-- Modules JS — ordre de chargement important -->
+  <script src="js/storage.js"></script>
+  <script src="js/parser.js"></script>
+  <script src="js/builder.js"></script>
+  <script src="js/tree.js"></script>
+  <script src="js/editor.js"></script>
+  <script src="js/caldav.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/app.js"></script>
+
+  <!-- Service Worker PWA -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('service-worker.js')
+        .catch(e => console.warn('gtgWeb : service worker non enregistré', e));
+    }
+  </script>
+
+</body>
+</html>
