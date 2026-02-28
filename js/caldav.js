@@ -166,7 +166,7 @@ const CalDAV = (() => {
     const response = await _request('PUT', uid + '.ics', {
       headers: {
         'Content-Type': 'text/calendar; charset=utf-8',
-        'If-None-Match': '*', // Refuser si UID existe déjà
+
       },
       body: ical,
     });
