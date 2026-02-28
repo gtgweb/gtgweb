@@ -2,8 +2,6 @@
  * gtgWeb — Module Builder
  *
  * Construit et met à jour les données iCal (VTODO) depuis les objets Task.
- * Principe fondamental : toujours partir du VTODO brut (task.raw) pour
- * préserver les champs inconnus d'autres clients (X-APPLE-SORT-ORDER, etc.)
  *
  * @license GPL-3.0
  * @link    https://github.com/gtgweb/gtgweb
@@ -13,14 +11,11 @@
 
 const Builder = (() => {
 
-  // ── API publique ────────────────────────────────────────────────────────────
+  // ── API publique ──────────────────────────────────────────────────────────
 
-  /**
-   * Crée un VTODO complet depuis zéro.
-   */
-  function createVTODO(task) {
-    const uid  = task.uid || generateUID();
-    const now  = nowIcal();
+  function createVTODO(task, calendarName) {
+    const uid = task.uid || generateUID();
+    const now = nowIcal();
     const lines = [];
 
     lines.push('BEGIN:VCALENDAR');
@@ -34,9 +29,10 @@ const Builder = (() => {
     lines.push(`DTSTAMP:${now}`);
     lines.push('SEQUENCE:0');
 
-    if (task.tags && task.tags.length > 0) {
-      const cats = task.tags.map(t => t.replace(/^@/, '')).join(',');
-      lines.push(`CATEGORIES:${cats}`);
+    // Tags + DAV_{calendarName} pour que GTG desktop identifie la tâche
+    const allTags = _buildCategories(task.tags, calendarName);
+    if (allTags.length > 0) {
+      lines.push(`CATEGORIES:${allTags.join(',')}`);
     }
 
     _appendDates(lines, task);
@@ -49,19 +45,22 @@ const Builder = (() => {
       lines.push(`RELATED-TO;RELTYPE=PARENT:${task.parent}`);
     }
 
+    if (task.children && task.children.length > 0) {
+      for (const childUid of task.children) {
+        lines.push(`RELATED-TO;RELTYPE=CHILD:${childUid}`);
+      }
+    }
+
     lines.push('END:VTODO');
     lines.push('END:VCALENDAR');
 
     return lines.join('\r\n');
   }
 
-  /**
-   * Met à jour un VTODO existant en partant du raw.
-   */
-  function updateVTODO(task) {
-    if (!task.raw) return createVTODO(task);
+  function updateVTODO(task, calendarName) {
+    if (!task.raw) return createVTODO(task, calendarName);
 
-    const lines  = Parser.unfold(task.raw);
+    const lines  = _unfold(task.raw);
     const result = [];
 
     const managed = [
@@ -76,42 +75,36 @@ const Builder = (() => {
       if (line.startsWith('BEGIN:') &&
           !line.startsWith('BEGIN:VCALENDAR') &&
           !line.startsWith('BEGIN:VTODO')) {
-        inSubComponent = true;
-        result.push(line);
-        continue;
+        inSubComponent = true; result.push(line); continue;
       }
       if (line.startsWith('END:') &&
           !line.startsWith('END:VCALENDAR') &&
           !line.startsWith('END:VTODO')) {
-        inSubComponent = false;
-        result.push(line);
-        continue;
+        inSubComponent = false; result.push(line); continue;
       }
       if (inSubComponent) { result.push(line); continue; }
 
       const fieldName = line.split(/[:;]/)[0].toUpperCase();
       if (managed.includes(fieldName)) continue;
-
       result.push(line);
     }
 
     const endIdx = result.indexOf('END:VTODO');
     if (endIdx < 0) {
       console.error('gtgWeb Builder : END:VTODO introuvable dans raw');
-      return createVTODO(task);
+      return createVTODO(task, calendarName);
     }
 
     const updated = [];
-
     updated.push(`SUMMARY:${escapeIcal(task.title || '')}`);
     updated.push(`STATUS:${task.status || 'NEEDS-ACTION'}`);
     updated.push(`DTSTAMP:${nowIcal()}`);
     updated.push(`LAST-MODIFIED:${nowIcal()}`);
     updated.push(`SEQUENCE:${(task.sequence || 0) + 1}`);
 
-    if (task.tags && task.tags.length > 0) {
-      const cats = task.tags.map(t => t.replace(/^@/, '')).join(',');
-      updated.push(`CATEGORIES:${cats}`);
+    const allTags = _buildCategories(task.tags, calendarName);
+    if (allTags.length > 0) {
+      updated.push(`CATEGORIES:${allTags.join(',')}`);
     }
 
     _appendDates(updated, task);
@@ -139,79 +132,75 @@ const Builder = (() => {
     return result.join('\r\n');
   }
 
-  // ── Helpers dates ───────────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
   /**
-   * Ajoute DUE et DTSTART au tableau de lignes.
-   *
-   * Règles GTG-like :
-   * - Fuzzy sur DUE uniquement (pas sur DTSTART)
-   * - Si fuzzy → X-GTG-FUZZY + date sentinel 20991231
-   * - Si date réelle → DUE;VALUE=DATE:YYYYMMDD
-   * - Si ni fuzzy ni date → rien (pas de DUE)
-   * - DTSTART → toujours une date réelle, jamais fuzzy
+   * Construit la liste des catégories en ajoutant DAV_{calendarName}.
+   * C'est ce tag qui permet à GTG desktop d'identifier ses tâches.
+   */
+  function _buildCategories(tags, calendarName) {
+    const cats = (tags || []).map(t => t.replace(/^@/, ''));
+    if (calendarName) {
+      const davTag = 'DAV_' + calendarName;
+      if (!cats.includes(davTag)) cats.push(davTag);
+    }
+    return cats;
+  }
+
+  /**
+   * Ajoute DUE et DTSTART.
+   * - DUE : fuzzy OU date réelle OU rien
+   * - DTSTART : date réelle uniquement, jamais fuzzy
    */
   function _appendDates(lines, task) {
-    // DUE — fuzzy OU date réelle OU rien
     if (task.fuzzy) {
       lines.push(`X-GTG-FUZZY:${task.fuzzy}`);
       lines.push('DUE;VALUE=DATE:20991231');
     } else if (task.due) {
       lines.push(`DUE;VALUE=DATE:${dateToIcal(task.due)}`);
     }
-    // Pas de DUE si ni fuzzy ni date
-
-    // DTSTART — date réelle uniquement, jamais fuzzy
     if (task.start) {
       lines.push(`DTSTART;VALUE=DATE:${dateToIcal(task.start)}`);
     }
   }
 
-  // ── Helpers généraux ────────────────────────────────────────────────────────
+  /**
+   * Déplie les lignes RFC 5545 (continuation par espace en début de ligne).
+   */
+  function _unfold(raw) {
+    return raw
+      .replace(/\r\n /g, '')
+      .replace(/\r\n\t/g, '')
+      .split(/\r\n|\n/)
+      .filter(l => l.length > 0);
+  }
 
   function generateUID() {
-    const ts   = Date.now();
-    const rand = Math.random().toString(36).substring(2, 10);
-    return `gtgweb-${ts}-${rand}@gtgweb`;
+    return `gtgweb-${Date.now()}-${Math.random().toString(36).substring(2, 10)}@gtgweb`;
   }
 
   function nowIcal() {
     const d = new Date();
     return d.getUTCFullYear().toString()
-      + pad(d.getUTCMonth() + 1)
-      + pad(d.getUTCDate())
-      + 'T'
-      + pad(d.getUTCHours())
-      + pad(d.getUTCMinutes())
-      + pad(d.getUTCSeconds())
-      + 'Z';
+      + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate()) + 'T'
+      + pad(d.getUTCHours()) + pad(d.getUTCMinutes()) + pad(d.getUTCSeconds()) + 'Z';
   }
 
   function dateToIcal(date) {
-    return date.getFullYear().toString()
-      + pad(date.getMonth() + 1)
-      + pad(date.getDate());
+    const d = new Date(date);
+    return d.getFullYear().toString() + pad(d.getMonth() + 1) + pad(d.getDate());
   }
 
   function escapeIcal(str) {
-    return str
+    return String(str)
       .replace(/\\/g, '\\\\')
-      .replace(/;/g,  '\\;')
-      .replace(/,/g,  '\\,')
+      .replace(/;/g, '\\;')
+      .replace(/,/g, '\\,')
       .replace(/\n/g, '\\n');
   }
 
-  function pad(n) {
-    return n.toString().padStart(2, '0');
-  }
+  function pad(n) { return n.toString().padStart(2, '0'); }
 
-  return {
-    createVTODO,
-    updateVTODO,
-    generateUID,
-    nowIcal,
-    dateToIcal,
-    escapeIcal,
-  };
+  return { createVTODO, updateVTODO, generateUID, nowIcal, dateToIcal, escapeIcal };
 
 })();

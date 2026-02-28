@@ -2,158 +2,135 @@
 /**
  * gtgWeb — Proxy CalDAV
  *
- * Reçoit les requêtes CalDAV du navigateur, les retransmet au serveur
- * CalDAV cible, et ajoute les headers CORS nécessaires.
+ * Relaie les requêtes CalDAV depuis le navigateur vers le serveur.
+ * Ajoute les headers CORS nécessaires.
  *
- * Déploiement : poser ce fichier sur votre hébergement PHP par FTP.
- * Le fichier proxy-config.php (même dossier) contient l'URL cible.
+ * Endpoints :
+ *   GET  ?action=calendars  → liste les calendriers disponibles (PROPFIND sur $CALDAV_ROOT)
+ *   *    (sans action)      → proxy transparent vers $CALDAV_URL
  *
  * @license GPL-3.0
  * @link    https://github.com/gtgweb/gtgweb
  */
 
-// ── Configuration ─────────────────────────────────────────────────────────────
+require_once __DIR__ . '/proxy-config.php';
 
-$config_file = __DIR__ . '/proxy-config.php';
+// ── CORS ──────────────────────────────────────────────────────────────────────
 
-if (!file_exists($config_file)) {
-    http_response_code(503);
-    header('Content-Type: application/json');
-    echo json_encode(['error' => 'proxy-config.php manquant. Voir la documentation.']);
-    exit;
-}
+$origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '*';
+$allowed = isset($ALLOWED_ORIGIN) ? $ALLOWED_ORIGIN : '*';
 
-require $config_file;
-
-// $CALDAV_URL doit être défini dans proxy-config.php
-// ex: $CALDAV_URL = 'https://nuage.example.org/remote.php/dav/calendars/user/cal/';
-if (empty($CALDAV_URL)) {
-    http_response_code(503);
-    header('Content-Type: application/json');
-    echo json_encode(['error' => '$CALDAV_URL non défini dans proxy-config.php']);
-    exit;
-}
-
-// ── Headers CORS ──────────────────────────────────────────────────────────────
-
-// Origine autorisée — à restreindre à votre domaine en production
-// ex: $ALLOWED_ORIGIN = 'https://gtg.votredomaine.fr';
-$allowed_origin = $ALLOWED_ORIGIN ?? '*';
-
-header('Access-Control-Allow-Origin: ' . $allowed_origin);
+header('Access-Control-Allow-Origin: ' . $allowed);
 header('Access-Control-Allow-Methods: GET, PUT, DELETE, REPORT, PROPFIND, PROPPATCH, MKCALENDAR, OPTIONS');
 header('Access-Control-Allow-Headers: Authorization, Content-Type, Depth, If-Match, If-None-Match, Prefer');
 header('Access-Control-Expose-Headers: ETag, DAV');
-header('Access-Control-Max-Age: 86400');
 
-// Répondre immédiatement aux preflight OPTIONS
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
     exit;
 }
 
-// ── Vérification cURL ─────────────────────────────────────────────────────────
+// ── Action : liste des calendriers ───────────────────────────────────────────
 
-if (!function_exists('curl_init')) {
-    http_response_code(503);
-    header('Content-Type: application/json');
-    echo json_encode(['error' => 'cURL non disponible sur ce serveur PHP.']);
+if (isset($_GET['action']) && $_GET['action'] === 'calendars') {
+    if (!isset($CALDAV_ROOT)) {
+        // Fallback : déduire la racine depuis $CALDAV_URL
+        // https://nuage.example.org/remote.php/dav/calendars/user/cal/
+        // → https://nuage.example.org/remote.php/dav/calendars/user/
+        $parts = explode('/', rtrim($CALDAV_URL, '/'));
+        array_pop($parts); // retirer le nom du calendrier
+        $CALDAV_ROOT = implode('/', $parts) . '/';
+    }
+
+    $body = '<?xml version="1.0" encoding="utf-8"?>
+<D:propfind xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop>
+    <D:displayname/>
+    <D:resourcetype/>
+    <C:supported-calendar-component-set/>
+  </D:prop>
+</D:propfind>';
+
+    $ch = curl_init($CALDAV_ROOT);
+    curl_setopt_array($ch, [
+        CURLOPT_CUSTOMREQUEST  => 'PROPFIND',
+        CURLOPT_POSTFIELDS     => $body,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER     => [
+            'Authorization: ' . $_SERVER['HTTP_AUTHORIZATION'],
+            'Content-Type: application/xml; charset=utf-8',
+            'Depth: 1',
+        ],
+        CURLOPT_SSL_VERIFYPEER => true,
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    header('Content-Type: application/xml; charset=utf-8');
+    http_response_code($httpCode);
+    echo $response;
     exit;
 }
 
-// ── Construction de l'URL cible ───────────────────────────────────────────────
+// ── Proxy transparent ─────────────────────────────────────────────────────────
 
-// Le chemin après /proxy.php est ajouté à l'URL CalDAV de base
-// ex: GET /proxy.php/uid.ics → GET $CALDAV_URL/uid.ics
+// Construire l'URL cible
 $path = '';
-if (!empty($_SERVER['PATH_INFO'])) {
+if (isset($_SERVER['PATH_INFO'])) {
     $path = $_SERVER['PATH_INFO'];
-} elseif (!empty($_SERVER['REQUEST_URI'])) {
+} elseif (isset($_SERVER['REQUEST_URI'])) {
     $script = $_SERVER['SCRIPT_NAME'];
     $uri    = $_SERVER['REQUEST_URI'];
-    $path   = substr($uri, strlen($script));
-    $path   = strtok($path, '?'); // Retirer la query string
+    // Retirer le nom du script et les query strings
+    $uri = strtok($uri, '?');
+    if (strpos($uri, $script) === 0) {
+        $path = substr($uri, strlen($script));
+    }
 }
 
 $target_url = rtrim($CALDAV_URL, '/') . $path;
 
-// ── Transmission de la requête ────────────────────────────────────────────────
-
-$method  = $_SERVER['REQUEST_METHOD'];
-$body    = file_get_contents('php://input');
-
-// Headers à transmettre (liste blanche)
-$forward_headers = [];
-$allowed_headers = [
-    'authorization',
-    'content-type',
-    'depth',
-    'if-match',
-    'if-none-match',
-    'prefer',
-    'content-length',
-];
-
-foreach (getallheaders() as $name => $value) {
-    if (in_array(strtolower($name), $allowed_headers)) {
-        $forward_headers[] = "$name: $value";
+// Transmettre les headers de la requête
+$headers = [];
+foreach ($_SERVER as $key => $value) {
+    if (substr($key, 0, 5) === 'HTTP_') {
+        $name = str_replace('_', '-', substr($key, 5));
+        if (!in_array($name, ['HOST', 'ORIGIN', 'REFERER'])) {
+            $headers[] = $name . ': ' . $value;
+        }
     }
+    if ($key === 'CONTENT_TYPE')   $headers[] = 'Content-Type: ' . $value;
+    if ($key === 'CONTENT_LENGTH') $headers[] = 'Content-Length: ' . $value;
 }
 
-$ch = curl_init();
+$body = file_get_contents('php://input');
+
+$ch = curl_init($target_url);
 curl_setopt_array($ch, [
-    CURLOPT_URL            => $target_url,
-    CURLOPT_CUSTOMREQUEST  => $method,
-    CURLOPT_HTTPHEADER     => $forward_headers,
+    CURLOPT_CUSTOMREQUEST  => $_SERVER['REQUEST_METHOD'],
+    CURLOPT_POSTFIELDS     => $body ?: null,
     CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HEADER         => true,       // Récupérer les headers de réponse
-    CURLOPT_FOLLOWLOCATION => false,      // Ne pas suivre les redirections
-    CURLOPT_TIMEOUT        => 30,
+    CURLOPT_HEADER         => true,
+    CURLOPT_HTTPHEADER     => $headers,
     CURLOPT_SSL_VERIFYPEER => true,
-    CURLOPT_SSL_VERIFYHOST => 2,
 ]);
 
-// Corps de la requête pour PUT, REPORT, PROPFIND, PROPPATCH
-if (in_array($method, ['PUT', 'POST', 'REPORT', 'PROPFIND', 'PROPPATCH', 'MKCALENDAR'])) {
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
-}
-
-$response    = curl_exec($ch);
-$curl_error  = curl_error($ch);
-$http_code   = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-$header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+$response  = curl_exec($ch);
+$httpCode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
 curl_close($ch);
 
-// ── Gestion des erreurs cURL ──────────────────────────────────────────────────
+$responseHeaders = substr($response, 0, $headerSize);
+$responseBody    = substr($response, $headerSize);
 
-if ($response === false) {
-    http_response_code(502);
-    header('Content-Type: application/json');
-    echo json_encode(['error' => 'Proxy : impossible de joindre le serveur CalDAV.', 'detail' => $curl_error]);
-    exit;
-}
-
-// ── Transmission de la réponse ────────────────────────────────────────────────
-
-$response_headers = substr($response, 0, $header_size);
-$response_body    = substr($response, $header_size);
-
-// Headers de réponse à retransmettre (liste blanche)
-$forward_response_headers = [
-    'content-type',
-    'etag',
-    'dav',
-    'last-modified',
-    'location',
-];
-
-foreach (explode("\r\n", $response_headers) as $header_line) {
-    if (strpos($header_line, ':') === false) continue;
-    [$name, $value] = explode(':', $header_line, 2);
-    if (in_array(strtolower(trim($name)), $forward_response_headers)) {
-        header(trim($name) . ':' . $value, false);
+// Retransmettre les headers utiles
+foreach (explode("\r\n", $responseHeaders) as $line) {
+    if (preg_match('/^(ETag|DAV|Content-Type|Last-Modified):/i', $line)) {
+        header($line);
     }
 }
 
-http_response_code($http_code);
-echo $response_body;
+http_response_code($httpCode);
+echo $responseBody;

@@ -8,11 +8,12 @@
 'use strict';
 
 const App = {
-  index:       new Map(),
-  roots:       [],
-  all:         [],
-  config:      {},
-  pendingTask: null,
+  index:        new Map(),
+  roots:        [],
+  all:          [],
+  config:       {},
+  pendingTask:  null,
+  calendarName: '',   // displayname du calendrier actif (ex: 'gtg')
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -21,12 +22,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (Storage.hasCredentials()) {
     const creds = Storage.loadCredentials();
+    App.calendarName = creds.calendarName || '';
     CalDAV.init(creds.url, creds.username, creds.password);
     await loadAndRender();
   } else {
     UI.renderLogin();
   }
 });
+
+// ── Chargement ────────────────────────────────────────────────────────────────
 
 async function loadAndRender() {
   UI.setSyncState('syncing');
@@ -68,31 +72,68 @@ function renderCurrentView() {
   UI.renderMain(roots, App.index, tagList, untagged, counts);
 }
 
+// ── Actions ───────────────────────────────────────────────────────────────────
+
 async function handleAction(action, payload) {
   switch (action) {
 
+    // ── Étape 1 : saisie credentials ───────────────────────────────────────
     case 'login': {
-      const { url, username, password, persist } = payload;
+      const { url, username, password } = payload;
       if (!url || !username || !password) {
         UI.renderLogin('Veuillez remplir tous les champs.');
         return;
       }
       CalDAV.init(url, username, password);
       UI.setSyncState('syncing');
+
       const result = await CalDAV.testConnection();
       if (!result.ok) { UI.renderLogin(result.error); return; }
-      Storage.saveCredentials({ url, username, password }, persist);
+
+      // Étape 2 : lister les calendriers
+      try {
+        const calendars = await CalDAV.listCalendars();
+        UI.renderCalendarPicker(calendars, result.calendarName, payload);
+      } catch (e) {
+        // Pas de liste disponible — utiliser le displayname détecté
+        await _finalizeLogin(payload, result.calendarName || '', payload.persist);
+      }
+      break;
+    }
+
+    // ── Étape 2 : choix du calendrier ──────────────────────────────────────
+    case 'calendarSelected': {
+      const { loginPayload, calendarName, persist } = payload;
+      await _finalizeLogin(loginPayload, calendarName, persist);
+      break;
+    }
+
+    // ── Paramètres ─────────────────────────────────────────────────────────
+    case 'openSettings': {
+      const creds = Storage.loadCredentials() || {};
+      UI.renderSettings(creds, App.calendarName);
+      break;
+    }
+
+    case 'saveSettings': {
+      const { url, username, password, calendarName, persist } = payload;
+      Storage.saveCredentials({ url, username, password, calendarName }, persist);
+      App.calendarName = calendarName;
+      CalDAV.init(url, username, password);
+      UI.closeSettings();
       await loadAndRender();
       break;
     }
 
     case 'logout': {
       Storage.clearCredentials();
-      App.pendingTask = null;
+      App.pendingTask  = null;
+      App.calendarName = '';
       UI.renderLogin();
       break;
     }
 
+    // ── Navigation ──────────────────────────────────────────────────────────
     case 'changeView': {
       App.config.activeView = payload.view;
       Storage.saveConfig({ activeView: payload.view });
@@ -126,6 +167,7 @@ async function handleAction(action, payload) {
       break;
     }
 
+    // ── Éditeur ─────────────────────────────────────────────────────────────
     case 'openTask': {
       App.pendingTask = { ...payload.task };
       UI.renderEditor(payload.task);
@@ -144,7 +186,6 @@ async function handleAction(action, payload) {
       break;
     }
 
-    // Mise à jour locale uniquement — pas de réseau
     case 'editorTitleChange': {
       if (App.pendingTask) App.pendingTask.title = payload.title;
       break;
@@ -155,7 +196,6 @@ async function handleAction(action, payload) {
       if (App.pendingTask) {
         App.pendingTask.description = text;
         App.pendingTask.tags        = [...new Set([...task.tags, ...parsed.tags])];
-        // Les sous-tâches sont créées UNIQUEMENT à saveAndClose — pas ici
         App.pendingTask.subtasks    = parsed.subtasks;
       }
       break;
@@ -164,36 +204,23 @@ async function handleAction(action, payload) {
     case 'editorDateChange': {
       const { field, fuzzy, date } = payload;
       if (App.pendingTask) {
-        if (field === 'due') {
-          // DUE : fuzzy OU date réelle
-          App.pendingTask.fuzzy = fuzzy || null;
-          App.pendingTask.due   = date;
-        } else {
-          // START : date réelle uniquement, jamais fuzzy
-          App.pendingTask.start = date;
-          // Pas de fuzzy sur start
-        }
+        if (field === 'due') { App.pendingTask.fuzzy = fuzzy || null; App.pendingTask.due = date; }
+        else { App.pendingTask.start = date; }
       }
       break;
     }
 
-    // Sauvegarde explicite — bouton ← Sauvegarder
+    // ── Sauvegarder et fermer ───────────────────────────────────────────────
     case 'saveAndClose': {
       if (App.pendingTask) {
         const task = App.pendingTask;
-
         if (!task.title || !task.title.trim()) {
+          // Titre vide → abandon
           App.pendingTask = null;
           UI.closeEditor();
           break;
         }
-
         task.title = task.title.trim();
-
-        // DESCRIPTION sauvegardée telle quelle — jamais modifiée structurellement
-        // Les sous-tâches [ ] dans la DESCRIPTION sont une représentation textuelle
-        // redondante de RELATED-TO. On ne les retire pas, on ne les recrée pas.
-
         await _saveTask(task);
         App.pendingTask = null;
         await loadAndRender();
@@ -202,6 +229,14 @@ async function handleAction(action, payload) {
       break;
     }
 
+    // ── Annuler sans sauvegarder ────────────────────────────────────────────
+    case 'cancelEdit': {
+      App.pendingTask = null;
+      UI.closeEditor();
+      break;
+    }
+
+    // ── Marquer comme fait ──────────────────────────────────────────────────
     case 'toggleDone': {
       const { task } = payload;
       const updated = { ...task, status: task.status === 'COMPLETED' ? 'NEEDS-ACTION' : 'COMPLETED' };
@@ -210,22 +245,58 @@ async function handleAction(action, payload) {
       break;
     }
 
+    // ── Ignorer (CANCELLED) ─────────────────────────────────────────────────
     case 'dismissTask': {
       const updated = { ...payload.task, status: 'CANCELLED' };
       await _saveTask(updated);
       App.pendingTask = null;
+      UI.closeEditor();
       await loadAndRender();
+      break;
+    }
+
+    // ── Supprimer définitivement ────────────────────────────────────────────
+    case 'deleteTask': {
+      const { task } = payload;
+      if (!task.uid) break;
+      UI.setSyncState('syncing');
+      try {
+        await CalDAV.remove(task.uid, task.etag);
+        App.index.delete(task.uid);
+        App.pendingTask = null;
+        UI.closeEditor();
+        UI.setSyncState('done');
+        await loadAndRender();
+      } catch (e) {
+        console.error('gtgWeb : erreur suppression', e);
+        UI.setSyncState('error', 'Erreur de suppression.');
+      }
       break;
     }
   }
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+async function _finalizeLogin(loginPayload, calendarName, persist) {
+  Storage.saveCredentials({
+    url:          loginPayload.url,
+    username:     loginPayload.username,
+    password:     loginPayload.password,
+    calendarName: calendarName,
+  }, persist);
+  App.calendarName = calendarName;
+  await loadAndRender();
+}
+
 async function _saveTask(task) {
   UI.setSyncState('syncing');
   try {
-    const ical = task.raw ? Builder.updateVTODO(task) : Builder.createVTODO(task);
-    let result;
+    const ical = task.raw
+      ? Builder.updateVTODO(task, App.calendarName)
+      : Builder.createVTODO(task, App.calendarName);
 
+    let result;
     if (!task.raw) {
       await CalDAV.create(task.uid, ical);
       result = { ok: true, conflict: false };
@@ -247,20 +318,4 @@ async function _saveTask(task) {
     console.error('gtgWeb : erreur sauvegarde', e);
     UI.setSyncState('error', 'Erreur de sauvegarde.');
   }
-}
-
-async function _ensureSubtask(parentTask, subtaskTitle) {
-  const exists = Tree.getChildren(parentTask, App.index)
-    .some(c => c.title.toLowerCase() === subtaskTitle.toLowerCase());
-  if (exists) return;
-
-  const uid  = Builder.generateUID();
-  const task = {
-    uid, title: subtaskTitle, status: 'NEEDS-ACTION',
-    tags: [], parent: parentTask.uid, children: [],
-    sequence: 0, etag: '', raw: '',
-  };
-
-  await _saveTask(task);
-  await _saveTask({ ...parentTask, children: [...parentTask.children, uid] });
 }
