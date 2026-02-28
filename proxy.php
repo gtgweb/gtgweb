@@ -15,6 +15,31 @@
 
 require_once __DIR__ . '/proxy-config.php';
 
+// ── Récupération Authorization (Apache peut bloquer HTTP_AUTHORIZATION) ──────
+
+function get_auth_header() {
+    if (!empty($_SERVER['HTTP_AUTHORIZATION'])) {
+        return $_SERVER['HTTP_AUTHORIZATION'];
+    }
+    if (!empty($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+        return $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
+    }
+    // Fallback : décoder depuis PHP_AUTH_USER / PHP_AUTH_PW
+    if (isset($_SERVER['PHP_AUTH_USER'])) {
+        return 'Basic ' . base64_encode($_SERVER['PHP_AUTH_USER'] . ':' . $_SERVER['PHP_AUTH_PW']);
+    }
+    // Dernier recours : getallheaders()
+    if (function_exists('getallheaders')) {
+        $headers = getallheaders();
+        foreach ($headers as $name => $value) {
+            if (strtolower($name) === 'authorization') return $value;
+        }
+    }
+    return '';
+}
+
+$AUTH_HEADER = get_auth_header();
+
 // ── CORS ──────────────────────────────────────────────────────────────────────
 
 $origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '*';
@@ -57,7 +82,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'calendars') {
         CURLOPT_POSTFIELDS     => $body,
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER     => [
-            'Authorization: ' . $_SERVER['HTTP_AUTHORIZATION'],
+            'Authorization: ' . $AUTH_HEADER,
             'Content-Type: application/xml; charset=utf-8',
             'Depth: 1',
         ],
