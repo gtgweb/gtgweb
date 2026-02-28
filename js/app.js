@@ -190,7 +190,17 @@ async function handleAction(action, payload) {
 
         task.title = task.title.trim();
 
-        // Sous-tâches créées UNE SEULE FOIS ici
+        // Nettoyer la DESCRIPTION — retirer les lignes "- sous-tâche"
+        // Les sous-tâches vivent dans RELATED-TO uniquement (CalDAV pur)
+        if (task.description) {
+          task.description = task.description
+            .split('\n')
+            .filter(line => !line.match(/^- .+/))
+            .join('\n')
+            .trim();
+        }
+
+        // Sous-tâches créées UNE SEULE FOIS ici depuis le texte brut
         if (task.subtasks && task.subtasks.length > 0) {
           for (const subtaskTitle of task.subtasks) {
             await _ensureSubtask(task, subtaskTitle);
