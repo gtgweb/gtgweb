@@ -171,7 +171,20 @@ const CalDAV = (() => {
 
   async function update(uid, ical, etag = '') {
     const headers = { 'Content-Type': 'text/calendar; charset=utf-8' };
-    if (etag) headers['If-Match'] = etag;
+
+    // GET frais pour récupérer l'ETag courant côté serveur.
+    // Nécessaire car GTG desktop peut avoir modifié la tâche entre-temps.
+    try {
+      const getResp = await _request('GET', uid + '.ics');
+      if (getResp.ok) {
+        const freshEtag = getResp.headers.get('ETag');
+        if (freshEtag) headers['If-Match'] = freshEtag;
+      }
+    } catch (e) {
+      // GET échoué — on tente le PUT sans If-Match plutôt que d'abandonner
+      console.warn('gtgWeb CalDAV : GET frais échoué, PUT sans If-Match', e);
+    }
+
     const response = await _request('PUT', uid + '.ics', { headers, body: ical });
     if (response.status === 412) return { ok: false, conflict: true };
     if (!response.ok) throw new Error(`update(${uid}) échoué : HTTP ${response.status}`);
@@ -193,24 +206,40 @@ const CalDAV = (() => {
   function _parseMultistatus(xml) {
     const results = [];
     try {
-      const doc       = new DOMParser().parseFromString(xml, 'application/xml');
-      const NS_DAV    = 'DAV:';
-      const NS_CALDAV = 'urn:ietf:params:xml:ns:caldav';
-      const responses = doc.getElementsByTagNameNS(NS_DAV, 'response');
+      // Extraction via regex sur le XML brut — textContent du DOMParser
+      // normalise les espaces et détruit les sauts de ligne iCal.
+      const calDataRe = /<[^:>]*:?calendar-data[^>]*>([\s\S]*?)<\/[^:>]*:?calendar-data>/gi;
+      const etagRe    = /<[^:>]*:?getetag[^>]*>"?([^"<\s]+)"?<\/[^:>]*:?getetag>/gi;
 
-      for (const response of responses) {
-        const etagEl    = response.getElementsByTagNameNS(NS_DAV, 'getetag')[0];
-        const calDataEl = response.getElementsByTagNameNS(NS_CALDAV, 'calendar-data')[0];
-        if (!calDataEl) continue;
-        const ical = calDataEl.textContent;
-        if (!ical.includes('VTODO')) continue;
+      // Extraire tous les ETags dans l'ordre
+      const etags = [];
+      let em;
+      while ((em = etagRe.exec(xml)) !== null) {
+        etags.push(em[1].replace(/"/g, ''));
+      }
+
+      let m;
+      let idx = 0;
+      while ((m = calDataRe.exec(xml)) !== null) {
+        let ical = m[1]
+          .replace(/&amp;/g,  '&')
+          .replace(/&lt;/g,   '<')
+          .replace(/&gt;/g,   '>')
+          .replace(/&quot;/g, '"')
+          .replace(/&#13;/g,  '\r')
+          .trim();
+
+        if (!ical.includes('VTODO')) { idx++; continue; }
+
         const uidMatch = ical.match(/^UID:(.+)$/m);
-        if (!uidMatch) continue;
+        if (!uidMatch) { idx++; continue; }
+
         results.push({
           uid:  uidMatch[1].trim(),
-          etag: etagEl ? etagEl.textContent.replace(/"/g, '') : '',
+          etag: etags[idx] || '',
           ical,
         });
+        idx++;
       }
     } catch (e) {
       console.error('gtgWeb CalDAV : erreur parsing XML', e);

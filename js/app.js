@@ -214,13 +214,26 @@ async function handleAction(action, payload) {
     case 'saveAndClose': {
       if (App.pendingTask) {
         const task = App.pendingTask;
-        if (!task.title || !task.title.trim()) {
+
+        // Lire les valeurs DOM directement — le debounce peut ne pas avoir tiré
+        const titleEl = document.getElementById('editor-title');
+        const bodyEl  = document.getElementById('editor-body');
+        if (titleEl) task.title       = titleEl.value.trim();
+        if (bodyEl)  task.description = bodyEl.value;
+
+        // Recalculer les tags depuis la description finale
+        if (bodyEl) {
+          const parsed = Editor.parse(bodyEl.value);
+          task.tags = [...new Set([...(task.tags || []), ...parsed.tags])];
+        }
+
+        if (!task.title) {
           // Titre vide → abandon
           App.pendingTask = null;
           UI.closeEditor();
           break;
         }
-        task.title = task.title.trim();
+
         await _saveTask(task);
         App.pendingTask = null;
         await loadAndRender();

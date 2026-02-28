@@ -168,11 +168,13 @@ const Builder = (() => {
    * Déplie les lignes RFC 5545 (continuation par espace en début de ligne).
    */
   function _unfold(raw) {
+    // Gerer CRLF et LF seuls (Nextcloud retourne LF sans CR)
     return raw
-      .replace(/\r\n /g, '')
-      .replace(/\r\n\t/g, '')
+      .replace(/\r\n([ \t])/g, '$1')
+      .replace(/\n([ \t])/g, '$1')
       .split(/\r\n|\n/)
-      .filter(l => l.length > 0);
+      .map(function(l) { return l.replace(/[ \t]+$/, ''); })
+      .filter(function(l) { return l.length > 0; });
   }
 
   function generateUID() {
