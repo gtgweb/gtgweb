@@ -1,26 +1,19 @@
 /**
  * gtgWeb — Application
  *
- * Point d'entrée principal. Orchestre CalDAV, Parser, Builder,
- * Tree, Editor, Storage et UI.
- *
  * @license GPL-3.0
  * @link    https://github.com/gtgweb/gtgweb
  */
 
 'use strict';
 
-// ── État global ───────────────────────────────────────────────────────────────
-
 const App = {
   index:       new Map(),
   roots:       [],
   all:         [],
   config:      {},
-  pendingTask: null,   // Tâche en cours d'édition — sauvegardée à la fermeture
+  pendingTask: null,
 };
-
-// ── Démarrage ─────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
   App.config = Storage.loadConfig();
@@ -35,8 +28,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-// ── Chargement et rendu ───────────────────────────────────────────────────────
-
 async function loadAndRender() {
   UI.setSyncState('syncing');
   try {
@@ -45,7 +36,7 @@ async function loadAndRender() {
     const { index, orphans } = Tree.build(App.all);
     App.index = index;
     if (orphans.length > 0) {
-      console.warn(`gtgWeb : ${orphans.length} tâche(s) orpheline(s) (parent introuvable)`);
+      console.warn(`gtgWeb : ${orphans.length} tâche(s) orpheline(s)`);
     }
     renderCurrentView();
     UI.setSyncState('done');
@@ -76,8 +67,6 @@ function renderCurrentView() {
 
   UI.renderMain(roots, App.index, tagList, untagged, counts);
 }
-
-// ── Gestionnaire d'actions ────────────────────────────────────────────────────
 
 async function handleAction(action, payload) {
   switch (action) {
@@ -138,14 +127,12 @@ async function handleAction(action, payload) {
     }
 
     case 'openTask': {
-      // Ouvrir une tâche existante
       App.pendingTask = { ...payload.task };
       UI.renderEditor(payload.task);
       break;
     }
 
     case 'newTask': {
-      // Nouvelle tâche — stockée en pending jusqu'à la sauvegarde explicite
       const uid  = Builder.generateUID();
       const task = {
         uid, title: '', status: 'NEEDS-ACTION', description: '',
@@ -157,7 +144,7 @@ async function handleAction(action, payload) {
       break;
     }
 
-    // Mise à jour locale uniquement — pas de sauvegarde réseau
+    // Mise à jour locale uniquement — pas de réseau
     case 'editorTitleChange': {
       if (App.pendingTask) App.pendingTask.title = payload.title;
       break;
@@ -168,6 +155,7 @@ async function handleAction(action, payload) {
       if (App.pendingTask) {
         App.pendingTask.description = text;
         App.pendingTask.tags        = [...new Set([...task.tags, ...parsed.tags])];
+        // Les sous-tâches sont créées UNIQUEMENT à saveAndClose — pas ici
         App.pendingTask.subtasks    = parsed.subtasks;
       }
       break;
@@ -176,19 +164,25 @@ async function handleAction(action, payload) {
     case 'editorDateChange': {
       const { field, fuzzy, date } = payload;
       if (App.pendingTask) {
-        if (field === 'due') { App.pendingTask.fuzzy = fuzzy || null; App.pendingTask.due = date; }
-        else { App.pendingTask.start = date; }
+        if (field === 'due') {
+          // DUE : fuzzy OU date réelle
+          App.pendingTask.fuzzy = fuzzy || null;
+          App.pendingTask.due   = date;
+        } else {
+          // START : date réelle uniquement, jamais fuzzy
+          App.pendingTask.start = date;
+          // Pas de fuzzy sur start
+        }
       }
       break;
     }
 
-    // Sauvegarde explicite — déclenchée par le bouton ← dans l'éditeur
+    // Sauvegarde explicite — bouton ← Sauvegarder
     case 'saveAndClose': {
       if (App.pendingTask) {
         const task = App.pendingTask;
 
         if (!task.title || !task.title.trim()) {
-          // Titre vide → abandon silencieux
           App.pendingTask = null;
           UI.closeEditor();
           break;
@@ -196,7 +190,7 @@ async function handleAction(action, payload) {
 
         task.title = task.title.trim();
 
-        // Créer les sous-tâches détectées
+        // Sous-tâches créées UNE SEULE FOIS ici
         if (task.subtasks && task.subtasks.length > 0) {
           for (const subtaskTitle of task.subtasks) {
             await _ensureSubtask(task, subtaskTitle);
@@ -229,12 +223,10 @@ async function handleAction(action, payload) {
   }
 }
 
-// ── Helpers de sauvegarde ─────────────────────────────────────────────────────
-
 async function _saveTask(task) {
   UI.setSyncState('syncing');
   try {
-    const ical   = task.raw ? Builder.updateVTODO(task) : Builder.createVTODO(task);
+    const ical = task.raw ? Builder.updateVTODO(task) : Builder.createVTODO(task);
     let result;
 
     if (!task.raw) {
@@ -246,7 +238,7 @@ async function _saveTask(task) {
 
     if (result.conflict) {
       console.warn(`gtgWeb : conflit sur ${task.uid}`);
-      UI.setSyncState('error', 'Conflit détecté — rechargement…');
+      UI.setSyncState('error', 'Conflit — rechargement…');
       await loadAndRender();
       return;
     }

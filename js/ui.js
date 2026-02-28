@@ -465,17 +465,12 @@ const UI = (() => {
 
         <div class="editor-dates">
           <div class="date-field">
-            <label>Début</label>
-            <div class="fuzzy-picker" id="picker-start">
-              ${fuzzyLabels.map(f => `
-                <button class="fuzzy-btn" data-fuzzy="${f}" data-field="start">${fuzzyNames[f]}</button>
-              `).join('')}
-              <input type="date" class="date-input" id="input-start"
-                     value="${task.start ? _dateToInput(task.start) : ''}" />
-            </div>
+            <label>Commence le</label>
+            <input type="date" class="date-input" id="input-start"
+                   value="${task.start ? _dateToInput(task.start) : ''}" />
           </div>
           <div class="date-field">
-            <label>Échéance</label>
+            <label>Prévue pour</label>
             <div class="fuzzy-picker" id="picker-due">
               ${fuzzyLabels.map(f => `
                 <button class="fuzzy-btn ${task.fuzzy === f ? 'fuzzy-btn--active' : ''}"
@@ -518,20 +513,44 @@ const UI = (() => {
     }, 500);
     titleEl.addEventListener('input', e => doSaveTitle(e.target.value));
 
-    // Fuzzy pickers
-    panel.querySelectorAll('.fuzzy-btn').forEach(btn => {
+    // Commence le — date réelle uniquement
+    const startEl = document.getElementById('input-start');
+    if (startEl) {
+      startEl.addEventListener('change', e => {
+        const date = e.target.value ? new Date(e.target.value) : null;
+        _onAction('editorDateChange', { uid: task.uid, task, field: 'start', fuzzy: null, date });
+      });
+    }
+
+    // Prévue pour — fuzzy OU date réelle
+    panel.querySelectorAll('.fuzzy-btn[data-field="due"]').forEach(btn => {
       btn.addEventListener('click', () => {
-        panel.querySelectorAll(`.fuzzy-btn[data-field="${btn.dataset.field}"]`)
+        panel.querySelectorAll('.fuzzy-btn[data-field="due"]')
           .forEach(b => b.classList.remove('fuzzy-btn--active'));
         btn.classList.add('fuzzy-btn--active');
+        // Vider le champ date si fuzzy sélectionné
+        const dueInput = document.getElementById('input-due');
+        if (dueInput) dueInput.value = '';
         _onAction('editorDateChange', {
           uid: task.uid, task,
-          field: btn.dataset.field,
+          field: 'due',
           fuzzy: btn.dataset.fuzzy,
           date: null,
         });
       });
     });
+
+    // Prévue pour — date réelle (désactive le fuzzy)
+    const dueEl = document.getElementById('input-due');
+    if (dueEl) {
+      dueEl.addEventListener('change', e => {
+        const date = e.target.value ? new Date(e.target.value) : null;
+        // Désactiver les boutons fuzzy
+        panel.querySelectorAll('.fuzzy-btn[data-field="due"]')
+          .forEach(b => b.classList.remove('fuzzy-btn--active'));
+        _onAction('editorDateChange', { uid: task.uid, task, field: 'due', fuzzy: null, date });
+      });
+    }
 
     // Boutons statut
     document.getElementById('btn-done').addEventListener('click', () => {
