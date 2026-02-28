@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>gtgWeb — Getting Things GNOME, partout</title>
+  <meta name="description" content="gtgWeb est le compagnon web de GTG desktop. Accédez à vos tâches depuis n'importe quel navigateur. Libre, auto-hébergé, respectueux de votre vie privée.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --blue:#3584e4;--blue-light:#62a0ea;--blue-dark:#1c5ba3;
+      --green:#33d17a;--orange:#ff7800;--purple:#9141ac;
+      --ink:#1a1a2e;--muted:#6b7280;--faint:#e8eaf0;
+      --white:#ffffff;--paper:#f8f9fc;
+      --font-d:'DM Serif Display',Georgia,serif;
+      --font-b:'DM Sans',system-ui,sans-serif;
+      --r:12px;--shadow:0 4px 24px rgba(26,26,46,.10);
+      --shadow-lg:0 12px 48px rgba(26,26,46,.18);
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth}
+    body{font-family:var(--font-b);font-size:16px;line-height:1.6;color:var(--ink);background:var(--white);-webkit-font-smoothing:antialiased}
+    a{color:inherit;text-decoration:none}
+
+    nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:16px 48px;background:rgba(255,255,255,.88);backdrop-filter:blur(14px);border-bottom:1px solid rgba(26,26,46,.06)}
+    .nav-logo{font-weight:600;font-size:18px;letter-spacing:-.3px}
+    .nav-logo span{color:var(--blue)}.nav-logo em{color:var(--muted);font-style:normal;font-weight:300}
+    .nav-links{display:flex;align-items:center;gap:28px;list-style:none}
+    .nav-links a{font-size:14px;font-weight:500;color:var(--muted);transition:color .2s}
+    .nav-links a:hover{color:var(--ink)}
+    .nav-cta{background:var(--ink)!important;color:var(--white)!important;padding:8px 20px;border-radius:100px}
+    .nav-cta:hover{background:var(--blue-dark)!important}
+
+    .hero{min-height:100vh;display:flex;align-items:center;padding:130px 48px 80px;background:var(--paper);position:relative;overflow:hidden}
+    .hero::before{content:'';position:absolute;top:-200px;right:-150px;width:700px;height:700px;border-radius:50%;background:radial-gradient(circle,rgba(53,132,228,.13) 0%,transparent 70%);pointer-events:none}
+    .hero::after{content:'';position:absolute;bottom:-120px;left:-120px;width:500px;height:500px;border-radius:50%;background:radial-gradient(circle,rgba(51,209,122,.09) 0%,transparent 70%);pointer-events:none}
+    .hero-inner{max-width:1140px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center;position:relative;z-index:1}
+    .hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(53,132,228,.10);color:var(--blue-dark);padding:6px 14px;border-radius:100px;font-size:13px;font-weight:500;margin-bottom:24px;border:1px solid rgba(53,132,228,.2)}
+    .hero-badge-dot{width:6px;height:6px;border-radius:50%;background:var(--blue);animation:pulse 2.2s ease-in-out infinite}
+    @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+    h1{font-family:var(--font-d);font-size:clamp(2.4rem,4.5vw,3.4rem);line-height:1.12;color:var(--ink);margin-bottom:24px;letter-spacing:-.5px}
+    h1 em{font-style:italic;color:var(--blue)}
+    .hero-desc{font-size:17px;color:var(--muted);line-height:1.75;margin-bottom:40px;font-weight:300;max-width:480px}
+    .hero-desc strong{color:var(--ink);font-weight:500}
+    .hero-actions{display:flex;gap:16px;flex-wrap:wrap}
+    .btn-p{display:inline-flex;align-items:center;gap:8px;background:var(--blue);color:var(--white);padding:13px 28px;border-radius:100px;font-weight:600;font-size:15px;box-shadow:0 4px 16px rgba(53,132,228,.35);transition:background .2s,transform .15s}
+    .btn-p:hover{background:var(--blue-dark);transform:translateY(-1px)}
+    .btn-g{display:inline-flex;align-items:center;gap:8px;color:var(--ink);padding:13px 28px;border-radius:100px;font-weight:500;font-size:15px;border:1.5px solid var(--faint);transition:border-color .2s,background .2s}
+    .btn-g:hover{border-color:var(--ink);background:var(--faint)}
+
+    .app-window{background:#1e1e2e;border-radius:16px;overflow:hidden;box-shadow:var(--shadow-lg),0 0 0 1px rgba(255,255,255,.05);transform:perspective(1000px) rotateY(-4deg) rotateX(2deg);transition:transform .5s ease}
+    .app-window:hover{transform:perspective(1000px) rotateY(-1deg) rotateX(0)}
+    .titlebar{display:flex;align-items:center;gap:7px;padding:11px 16px;background:#181825;border-bottom:1px solid rgba(255,255,255,.06)}
+    .dot{width:10px;height:10px;border-radius:50%}
+    .dot:nth-child(1){background:#ff5f57}.dot:nth-child(2){background:#ffbd2e}.dot:nth-child(3){background:#28c941}
+    .url-bar{flex:1;text-align:center;font-size:11px;color:rgba(255,255,255,.25);font-family:monospace}
+    .app-body{display:grid;grid-template-columns:180px 1fr;height:400px}
+    .mock-sb{background:#181825;padding:10px 0;border-right:1px solid rgba(255,255,255,.05)}
+    .mock-logo{padding:4px 14px 12px;font-size:13px;font-weight:600;color:#cdd6f4}
+    .mock-logo span{color:#3584e4}.mock-logo em{color:rgba(255,255,255,.3);font-style:normal}
+    .mtag{display:flex;align-items:center;gap:8px;padding:5px 14px;font-size:11px;color:rgba(255,255,255,.45)}
+    .mtag.on{background:rgba(53,132,228,.15);color:#89b4fa}
+    .mdot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+    .mock-main{display:flex;flex-direction:column}
+    .mock-tb{display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.05)}
+    .mtab{padding:3px 9px;border-radius:4px;font-size:10px;color:rgba(255,255,255,.35)}
+    .mtab.on{background:rgba(255,255,255,.08);color:#cdd6f4}
+    .mock-tasks{flex:1;padding:6px 0}
+    .mtask{display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:11px;color:rgba(255,255,255,.65)}
+    .mtask.sel{background:rgba(53,132,228,.1);border-left:2px solid #3584e4;color:#cdd6f4}
+    .mtask.sub{padding-left:28px;opacity:.6}
+    .mcheck{width:12px;height:12px;border-radius:2px;border:1.5px solid rgba(255,255,255,.2);flex-shrink:0}
+    .mcheck.done{background:#33d17a;border-color:#33d17a}
+    .mpill{font-size:9px;padding:1px 5px;border-radius:8px;margin-left:auto;white-space:nowrap}
+
+    section{padding:100px 48px}
+    .inner{max-width:1140px;margin:0 auto}
+    .slabel{font-size:12px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--blue);margin-bottom:16px}
+    .stitle{font-family:var(--font-d);font-size:clamp(1.8rem,3.2vw,2.5rem);line-height:1.15;color:var(--ink);margin-bottom:20px;max-width:660px}
+    .sdesc{font-size:16px;color:var(--muted);max-width:580px;font-weight:300;line-height:1.75}
+
+    .personas{background:var(--white)}
+    .personas-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;margin-top:64px}
+    .persona-card{border-radius:var(--r);border:1px solid var(--faint);padding:36px 32px;display:flex;flex-direction:column;gap:16px;transition:border-color .2s,box-shadow .2s,transform .2s;position:relative;overflow:hidden}
+    .persona-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+    .persona-card.p1::before{background:var(--blue)}.persona-card.p2::before{background:var(--green)}.persona-card.p3::before{background:var(--purple)}
+    .persona-card:hover{border-color:rgba(53,132,228,.25);box-shadow:var(--shadow);transform:translateY(-2px)}
+    .persona-who{font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase}
+    .p1 .persona-who{color:var(--blue)}.p2 .persona-who{color:#1a8a4a}.p3 .persona-who{color:var(--purple)}
+    .persona-pitch{font-family:var(--font-d);font-size:1.3rem;line-height:1.25;color:var(--ink)}
+    .persona-pitch em{font-style:italic}
+    .persona-desc{font-size:14px;color:var(--muted);font-weight:300;line-height:1.7}
+
+    .features{background:var(--paper)}
+    .features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:64px}
+    .feat{background:var(--white);padding:28px;border-radius:var(--r);border:1px solid var(--faint);transition:border-color .2s,box-shadow .2s,transform .2s}
+    .feat:hover{border-color:rgba(53,132,228,.25);box-shadow:var(--shadow);transform:translateY(-2px)}
+    .feat-icon{font-size:22px;margin-bottom:14px}
+    .feat-title{font-size:14px;font-weight:600;color:var(--ink);margin-bottom:6px}
+    .feat-desc{font-size:13px;color:var(--muted);font-weight:300;line-height:1.65}
+
+    .ecosystem{background:var(--white)}
+    .eco-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:64px}
+    .eco-card{border-radius:var(--r);border:1px solid var(--faint);padding:28px;display:flex;flex-direction:column;gap:10px}
+    .eco-icon{font-size:26px}.eco-name{font-size:15px;font-weight:600;color:var(--ink)}
+    .eco-desc{font-size:13px;color:var(--muted);font-weight:300;line-height:1.65;flex:1}
+    .eco-badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;padding:4px 10px;border-radius:100px;width:fit-content}
+    .eco-badge.ok{background:rgba(51,209,122,.12);color:#1a8a4a}
+    .eco-badge.partial{background:rgba(255,120,0,.10);color:#b35900}
+
+    .privacy{background:var(--ink);color:var(--white)}
+    .privacy .stitle{color:var(--white)}.privacy .sdesc{color:rgba(255,255,255,.5)}.privacy .slabel{color:var(--blue-light)}
+    .priv-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:32px;margin-top:64px}
+    .priv-item{display:flex;gap:20px}
+    .priv-icon{font-size:22px;flex-shrink:0;margin-top:2px}
+    .priv-title{font-size:15px;font-weight:600;color:var(--white);margin-bottom:6px}
+    .priv-desc{font-size:14px;color:rgba(255,255,255,.4);font-weight:300;line-height:1.65}
+
+    .install{background:var(--paper)}
+    .install-steps{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-top:64px;counter-reset:steps}
+    .step{background:var(--white);padding:28px;border-radius:var(--r);border:1px solid var(--faint);counter-increment:steps}
+    .step::before{content:counter(steps);display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:var(--blue);color:var(--white);font-size:13px;font-weight:700;margin-bottom:14px}
+    .step-title{font-size:14px;font-weight:600;color:var(--ink);margin-bottom:6px}
+    .step-desc{font-size:13px;color:var(--muted);font-weight:300;line-height:1.6}
+    code{font-family:'JetBrains Mono','Fira Code',monospace;font-size:11px;background:rgba(26,26,46,.06);padding:2px 5px;border-radius:3px;color:var(--blue-dark)}
+
+    .roadmap{background:var(--white)}
+    .roadmap-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:64px}
+    .rm-card{border-radius:var(--r);border:1px solid var(--faint);padding:24px}
+    .rm-version{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;padding:3px 9px;border-radius:100px;margin-bottom:14px}
+    .rv1{background:rgba(53,132,228,.12);color:var(--blue-dark)}
+    .rv2{background:rgba(51,209,122,.12);color:#1a8a4a}
+    .rv3{background:rgba(145,65,172,.12);color:var(--purple)}
+    .rm-title{font-size:14px;font-weight:600;color:var(--ink);margin-bottom:12px}
+    .rm-list{display:flex;flex-direction:column;gap:7px}
+    .rm-item{font-size:13px;color:var(--muted);font-weight:300;display:flex;gap:8px;align-items:flex-start}
+    .rm-item::before{content:'·';color:var(--blue);font-weight:700;flex-shrink:0}
+
+    .cta-section{background:linear-gradient(135deg,var(--blue-dark) 0%,var(--blue) 100%);text-align:center;padding:100px 48px}
+    .cta-section .stitle{color:var(--white);margin:0 auto 20px}
+    .cta-section .sdesc{color:rgba(255,255,255,.65);margin:0 auto 48px}
+    .cta-btns{display:flex;justify-content:center;gap:16px;flex-wrap:wrap}
+    .btn-w{display:inline-flex;align-items:center;gap:8px;background:var(--white);color:var(--blue-dark);padding:13px 32px;border-radius:100px;font-weight:600;font-size:15px;box-shadow:0 4px 16px rgba(0,0,0,.15);transition:transform .15s}
+    .btn-w:hover{transform:translateY(-1px)}
+    .btn-ow{display:inline-flex;align-items:center;gap:8px;color:var(--white);padding:13px 32px;border-radius:100px;font-weight:500;font-size:15px;border:1.5px solid rgba(255,255,255,.4);transition:background .2s}
+    .btn-ow:hover{background:rgba(255,255,255,.1)}
+
+    footer{background:var(--ink);color:rgba(255,255,255,.35);padding:40px 48px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px}
+    .footer-logo{font-weight:600;font-size:16px;color:rgba(255,255,255,.75)}
+    .footer-logo span{color:var(--blue-light)}
+    .footer-links{display:flex;gap:24px;list-style:none}
+    .footer-links a{font-size:13px;transition:color .2s}
+    .footer-links a:hover{color:rgba(255,255,255,.7)}
+
+    .fade-in{opacity:0;transform:translateY(18px);transition:opacity .6s ease,transform .6s ease}
+    .fade-in.visible{opacity:1;transform:translateY(0)}
+
+    @media(max-width:960px){
+      nav{padding:14px 20px}.nav-links{display:none}
+      .hero{padding:100px 20px 60px}.hero-inner{grid-template-columns:1fr;gap:48px}
+      .app-window{transform:none}
+      section{padding:60px 20px}
+      .personas-grid,.features-grid,.eco-grid,.roadmap-grid{grid-template-columns:1fr}
+      .priv-grid{grid-template-columns:1fr}
+      .install-steps{grid-template-columns:1fr 1fr}
+      footer{flex-direction:column;align-items:flex-start}
+    }
+    @media(max-width:540px){.install-steps{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-logo"><span>gtg</span><em>Web</em></div>
+  <ul class="nav-links">
+    <li><a href="#personas">Pour qui ?</a></li>
+    <li><a href="#features">Fonctionnalités</a></li>
+    <li><a href="#ecosystem">Écosystème</a></li>
+    <li><a href="#install">Installation</a></li>
+    <li><a href="https://github.com/gtgweb/gtgweb" class="nav-cta">GitHub →</a></li>
+  </ul>
+</nav>
+
+<section class="hero">
+  <div class="hero-inner">
+    <div>
+      <div class="hero-badge"><span class="hero-badge-dot"></span>Développement actif · v1 en cours</div>
+      <h1>GTG dans votre navigateur —<br><em>là où GTG ne peut pas aller</em></h1>
+      <p class="hero-desc">
+        gtgWeb est le <strong>compagnon web de Getting Things GNOME</strong>.
+        Accédez à vos tâches depuis votre mobile, un ordinateur partagé, ou partout
+        où GTG desktop n'est pas installé. Vos données restent sur <strong>votre Nextcloud</strong>.
+      </p>
+      <div class="hero-actions">
+        <a href="https://github.com/gtgweb/gtgweb" class="btn-p">
+          Voir sur GitHub
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+        <a href="#install" class="btn-g">Comment installer</a>
+      </div>
+    </div>
+    <div>
+      <div class="app-window">
+        <div class="titlebar">
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          <div class="url-bar">gtgweb.example.org</div>
+        </div>
+        <div class="app-body">
+          <div class="mock-sb">
+            <div class="mock-logo"><span>gtg</span><em>Web</em></div>
+            <div class="mtag on"><div class="mdot" style="background:#cdd6f4"></div>Toutes</div>
+            <div class="mtag"><div class="mdot" style="background:#3584e4"></div>@travail</div>
+            <div class="mtag"><div class="mdot" style="background:#33d17a"></div>@perso</div>
+            <div class="mtag"><div class="mdot" style="background:#f6d32d"></div>@projet</div>
+            <div class="mtag"><div class="mdot" style="background:#9141ac"></div>@lecture</div>
+            <div class="mtag"><div class="mdot" style="background:#ff7800"></div>@urgent</div>
+          </div>
+          <div class="mock-main">
+            <div class="mock-tb">
+              <div class="mtab on">Ouvertes 31</div>
+              <div class="mtab">Actionnables</div>
+              <div class="mtab">Fermées</div>
+            </div>
+            <div class="mock-tasks">
+              <div class="mtask sel"><div class="mcheck"></div>Préparer la réunion de lundi<span class="mpill" style="background:rgba(53,132,228,.15);color:#62a0ea">@travail</span></div>
+              <div class="mtask sub"><div class="mcheck"></div>Relire le compte-rendu</div>
+              <div class="mtask sub"><div class="mcheck done"></div><span style="opacity:.5;text-decoration:line-through">Envoyer l'ordre du jour</span></div>
+              <div class="mtask"><div class="mcheck"></div>Appeler le plombier<span class="mpill" style="background:rgba(51,209,122,.12);color:#33d17a">@perso</span></div>
+              <div class="mtask"><div class="mcheck"></div>Lire « La société du spectacle »<span class="mpill" style="background:rgba(145,65,172,.12);color:#9141ac">@lecture</span></div>
+              <div class="mtask"><div class="mcheck"></div>Renouveler l'abonnement<span class="mpill" style="background:rgba(255,120,0,.12);color:#b35900">Bientôt</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="personas" id="personas">
+  <div class="inner">
+    <div class="slabel">Pour qui ?</div>
+    <h2 class="stitle">Trois profils, une même philosophie</h2>
+    <p class="sdesc">gtgWeb ne remplace pas GTG desktop. Il l'accompagne — là où le bureau ne suffit plus.</p>
+    <div class="personas-grid">
+      <div class="persona-card p1 fade-in">
+        <div class="persona-who">L'utilisateur GTG desktop</div>
+        <div class="persona-pitch">GTG sur le bureau, <em>gtgWeb partout ailleurs</em></div>
+        <div class="persona-desc">Vous utilisez GTG desktop tous les jours sur votre machine GNOME. gtgWeb vous donne accès à vos tâches depuis votre téléphone, un ordinateur de travail, ou n'importe quel navigateur — sans toucher à votre configuration GTG. La synchronisation CalDAV fait le reste.</div>
+      </div>
+      <div class="persona-card p2 fade-in" style="transition-delay:.1s">
+        <div class="persona-who">Le fan du logiciel libre</div>
+        <div class="persona-pitch">La philosophie GTG, <em>sans GTG installé</em></div>
+        <div class="persona-desc">Vous aimez l'approche GTG — tâches hiérarchiques, dates floues, absence de friction — mais vous êtes sur Windows, macOS, ou ChromeOS. gtgWeb vous donne l'essentiel de l'expérience GTG dans le navigateur, connecté à votre propre Nextcloud.</div>
+      </div>
+      <div class="persona-card p3 fade-in" style="transition-delay:.2s">
+        <div class="persona-who">Le contributeur développeur</div>
+        <div class="persona-pitch">Un projet ouvert, <em>une architecture claire</em></div>
+        <div class="persona-desc">Vanilla JS, zéro framework, modules ES6, proxy PHP léger. L'architecture est délibérément simple pour rester maintenable par la communauté GTG. Si vous connaissez JS et l'API CalDAV, vous pouvez contribuer dès aujourd'hui.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="features" id="features">
+  <div class="inner">
+    <div class="slabel">Fonctionnalités</div>
+    <h2 class="stitle">L'essentiel de GTG, dans le navigateur</h2>
+    <p class="sdesc">gtgWeb implémente les concepts fondamentaux de GTG : hiérarchie, tags, dates floues, vues filtrées.</p>
+    <div class="features-grid">
+      <div class="feat fade-in"><div class="feat-icon">📋</div><div class="feat-title">Tâches hiérarchiques</div><div class="feat-desc">Arbre de tâches avec sous-tâches imbriquées. La hiérarchie est synchronisée avec GTG desktop via RELATED-TO CalDAV.</div></div>
+      <div class="feat fade-in" style="transition-delay:.08s"><div class="feat-icon">🏷</div><div class="feat-title">@tags colorés</div><div class="feat-desc">Les tags sont saisis inline dans le texte (@tag), affichés en couleur, filtrables depuis la sidebar — comme dans GTG desktop.</div></div>
+      <div class="feat fade-in" style="transition-delay:.16s"><div class="feat-icon">📅</div><div class="feat-title">Dates floues GTG-like</div><div class="feat-desc">Maintenant, Bientôt, Un jour, Plus tard. Les dates imprécises de GTG sont disponibles, sans forcer une date exacte.</div></div>
+      <div class="feat fade-in" style="transition-delay:.04s"><div class="feat-icon">↻</div><div class="feat-title">Sync CalDAV bidirectionnelle</div><div class="feat-desc">Créez ou modifiez depuis gtgWeb, retrouvez dans GTG desktop à la prochaine sync. Et inversement, validé terrain.</div></div>
+      <div class="feat fade-in" style="transition-delay:.12s"><div class="feat-icon">🌙</div><div class="feat-title">GNOME HIG &amp; mode sombre</div><div class="feat-desc">Palette GNOME Human Interface Guidelines. Le thème suit automatiquement les préférences système.</div></div>
+      <div class="feat fade-in" style="transition-delay:.20s"><div class="feat-icon">⚡</div><div class="feat-title">Léger, zéro dépendance</div><div class="feat-desc">Vanilla JS pur, zéro framework, zéro npm. Un dossier de fichiers statiques + un proxy PHP. C'est tout.</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="ecosystem" id="ecosystem">
+  <div class="inner">
+    <div class="slabel">Écosystème CalDAV</div>
+    <h2 class="stitle">gtgWeb dans votre écosystème</h2>
+    <p class="sdesc">gtgWeb s'appuie sur CalDAV — le standard ouvert. Il coexiste avec les autres clients sans conflit, chacun à sa place.</p>
+    <div class="eco-grid">
+      <div class="eco-card fade-in">
+        <div class="eco-icon">🖥</div>
+        <div class="eco-name">GTG Desktop</div>
+        <div class="eco-desc">Le client de référence, dont gtgWeb est le compagnon web. Même philosophie, même modèle de données. Synchronisation bidirectionnelle complète, tâches et sous-tâches incluses.</div>
+        <div class="eco-badge ok">✓ Sync bidirectionnelle validée</div>
+        <a href="https://wiki.gnome.org/Apps/GTG" style="font-size:13px;color:var(--blue);font-weight:500;margin-top:4px">Site officiel GTG →</a>
+      </div>
+      <div class="eco-card fade-in" style="transition-delay:.1s">
+        <div class="eco-icon">☁️</div>
+        <div class="eco-name">Nextcloud Tasks</div>
+        <div class="eco-desc">Le serveur. Nextcloud héberge vos VTODO CalDAV. gtgWeb s'y connecte via un proxy PHP léger. Aucune application Nextcloud supplémentaire requise.</div>
+        <div class="eco-badge ok">✓ Compatible</div>
+      </div>
+      <div class="eco-card fade-in" style="transition-delay:.2s">
+        <div class="eco-icon">📱</div>
+        <div class="eco-name">Tasks.org, OpenTasks…</div>
+        <div class="eco-desc">Des clients CalDAV Android valides, mais sans la philosophie GTG — pas de dates floues, pas de hiérarchie GTG-like. gtgWeb préserve leurs données sans les altérer.</div>
+        <div class="eco-badge partial">~ CalDAV compatible, pas GTG-like</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="privacy">
+  <div class="inner">
+    <div class="slabel">Vie privée</div>
+    <h2 class="stitle">Vos tâches vous appartiennent</h2>
+    <p class="sdesc">gtgWeb n'est pas un service. C'est un outil que vous hébergez, qui parle directement à votre serveur. Rien d'autre.</p>
+    <div class="priv-grid">
+      <div class="priv-item fade-in"><div class="priv-icon">🔒</div><div><div class="priv-title">Zéro cloud tiers</div><div class="priv-desc">Vos données ne quittent jamais votre Nextcloud. gtgWeb n'a pas de serveur. Il n'y a rien à pirater côté gtgWeb.</div></div></div>
+      <div class="priv-item fade-in" style="transition-delay:.08s"><div class="priv-icon">🕵️</div><div><div class="priv-title">Zéro tracking</div><div class="priv-desc">Aucun analytics, aucun cookie tiers, aucune télémétrie. Ce que vous faites dans gtgWeb ne regarde que vous.</div></div></div>
+      <div class="priv-item fade-in" style="transition-delay:.04s"><div class="priv-icon">📖</div><div><div class="priv-title">Code source ouvert</div><div class="priv-desc">GPL-3.0. Tout est lisible sur GitHub. Aucune partie cachée, aucune dépendance opaque.</div></div></div>
+      <div class="priv-item fade-in" style="transition-delay:.12s"><div class="priv-icon">🏠</div><div><div class="priv-title">Auto-hébergé</div><div class="priv-desc">Déployez sur votre hébergement PHP en quelques minutes. Un FTP suffit, aucune compétence serveur requise.</div></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="install" id="install">
+  <div class="inner">
+    <div class="slabel">Installation</div>
+    <h2 class="stitle">Déployé en 10 minutes</h2>
+    <p class="sdesc">Fonctionne sur n'importe quel hébergement PHP mutualisé. Pas de base de données, pas de build, pas de npm.</p>
+    <div class="install-steps">
+      <div class="step fade-in"><div class="step-title">Téléchargez</div><div class="step-desc">Clonez ou téléchargez le dépôt GitHub. Ce sont de simples fichiers statiques + un script PHP.</div></div>
+      <div class="step fade-in" style="transition-delay:.1s"><div class="step-title">Configurez</div><div class="step-desc">Copiez <code>proxy-config.example.php</code> → <code>proxy-config.php</code> et renseignez l'URL CalDAV de votre Nextcloud.</div></div>
+      <div class="step fade-in" style="transition-delay:.2s"><div class="step-title">Uploadez</div><div class="step-desc">Déposez tous les fichiers sur votre hébergement via FTP. Aucune configuration serveur requise.</div></div>
+      <div class="step fade-in" style="transition-delay:.3s"><div class="step-title">Connectez-vous</div><div class="step-desc">Ouvrez l'URL dans votre navigateur, saisissez vos identifiants Nextcloud — c'est prêt.</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="roadmap" id="roadmap">
+  <div class="inner">
+    <div class="slabel">Roadmap</div>
+    <h2 class="stitle">Ce qui vient ensuite</h2>
+    <p class="sdesc">gtgWeb grandit par itérations courtes et terrain. La v1 est en cours de stabilisation.</p>
+    <div class="roadmap-grid">
+      <div class="rm-card fade-in">
+        <div class="rm-version rv1">v1 — en cours</div>
+        <div class="rm-title">Le compagnon web de GTG</div>
+        <div class="rm-list">
+          <div class="rm-item">Tâches hiérarchiques + sous-tâches</div>
+          <div class="rm-item">Tags, dates floues, vues filtrées</div>
+          <div class="rm-item">Sync bidirectionnelle GTG desktop</div>
+          <div class="rm-item">Interface GNOME HIG, mode sombre</div>
+          <div class="rm-item">Déploiement FTP mutualisé</div>
+        </div>
+      </div>
+      <div class="rm-card fade-in" style="transition-delay:.1s">
+        <div class="rm-version rv2">v2 — planifiée</div>
+        <div class="rm-title">Multi-serveurs &amp; mobile-first</div>
+        <div class="rm-list">
+          <div class="rm-item">Multi-calendriers CalDAV</div>
+          <div class="rm-item">PWA — accès mobile installable</div>
+          <div class="rm-item">Mode hors-ligne (Service Worker)</div>
+          <div class="rm-item">Rappels VALARM</div>
+          <div class="rm-item">Partage de calendrier</div>
+        </div>
+      </div>
+      <div class="rm-card fade-in" style="transition-delay:.2s">
+        <div class="rm-version rv3">v3 et au-delà</div>
+        <div class="rm-title">Vers un GTG natif web</div>
+        <div class="rm-list">
+          <div class="rm-item">Récurrence (RRULE)</div>
+          <div class="rm-item">Config tags synchronisée GTG</div>
+          <div class="rm-item">Chiffrement côté client optionnel</div>
+          <div class="rm-item">Interface complète sans GTG desktop</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cta-section">
+  <div class="inner">
+    <h2 class="stitle">Rejoignez le projet</h2>
+    <p class="sdesc">gtgWeb est libre, gratuit, et accueille les contributions. Issues, PRs, retours d'usage — tout est bienvenu.</p>
+    <div class="cta-btns">
+      <a href="https://github.com/gtgweb/gtgweb" class="btn-w">Voir le code source</a>
+      <a href="https://github.com/gtgweb/gtgweb/blob/main/TODO.md" class="btn-ow">Roadmap détaillée</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-logo"><span>gtg</span>Web</div>
+  <ul class="footer-links">
+    <li><a href="https://github.com/gtgweb/gtgweb">GitHub</a></li>
+    <li><a href="https://github.com/gtgweb/gtgweb/blob/main/TODO.md">Roadmap</a></li>
+    <li><a href="https://github.com/gtgweb/gtgweb/blob/main/docs/">Documentation</a></li>
+    <li><a href="https://github.com/gtgweb/gtgweb/blob/main/CONTRIBUTING.md">Contribuer</a></li>
+    <li><a href="https://wiki.gnome.org/Apps/GTG">GTG desktop</a></li>
+    <li><a href="https://github.com/getting-things-gnome/gtg">GTG sur GitHub</a></li>
+  </ul>
+  <div>Logiciel libre — GPL-3.0</div>
+</footer>
+
+<script>
+  const io = new IntersectionObserver(e => {
+    e.forEach(el => { if (el.isIntersecting) el.target.classList.add('visible'); });
+  }, { threshold: 0.08 });
+  document.querySelectorAll('.fade-in').forEach(el => io.observe(el));
+</script>
+</body>
+</html>
