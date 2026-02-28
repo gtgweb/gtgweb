@@ -190,22 +190,9 @@ async function handleAction(action, payload) {
 
         task.title = task.title.trim();
 
-        // Nettoyer la DESCRIPTION — retirer les lignes "- sous-tâche"
-        // Les sous-tâches vivent dans RELATED-TO uniquement (CalDAV pur)
-        if (task.description) {
-          task.description = task.description
-            .split('\n')
-            .filter(line => !line.match(/^- .+/))
-            .join('\n')
-            .trim();
-        }
-
-        // Sous-tâches créées UNE SEULE FOIS ici depuis le texte brut
-        if (task.subtasks && task.subtasks.length > 0) {
-          for (const subtaskTitle of task.subtasks) {
-            await _ensureSubtask(task, subtaskTitle);
-          }
-        }
+        // DESCRIPTION sauvegardée telle quelle — jamais modifiée structurellement
+        // Les sous-tâches [ ] dans la DESCRIPTION sont une représentation textuelle
+        // redondante de RELATED-TO. On ne les retire pas, on ne les recrée pas.
 
         await _saveTask(task);
         App.pendingTask = null;
