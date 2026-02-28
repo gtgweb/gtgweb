@@ -456,7 +456,7 @@ const UI = (() => {
     panel.innerHTML = `
       <div class="editor">
         <header class="editor-header">
-          <button class="btn btn--icon" id="btn-close-editor" title="Fermer">✕</button>
+          <button class="btn btn--secondary btn--small" id="btn-close-editor">← Sauvegarder</button>
           <div class="sync-status" id="editor-sync"></div>
         </header>
 
@@ -544,7 +544,7 @@ const UI = (() => {
       closeEditor();
     });
 
-    document.getElementById('btn-close-editor').addEventListener('click', closeEditor);
+    document.getElementById("btn-close-editor").addEventListener("click", () => _onAction("saveAndClose", {}));
 
     // Parsing initial
     if (task.description) doParse.flush

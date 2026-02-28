@@ -4,13 +4,6 @@
  * Point d'entrée principal. Orchestre CalDAV, Parser, Builder,
  * Tree, Editor, Storage et UI.
  *
- * Flux principal :
- * 1. Charger les credentials (Storage)
- * 2. Initialiser CalDAV
- * 3. Charger les tâches (CalDAV → Parser → Tree)
- * 4. Rendre l'interface (UI)
- * 5. Réagir aux actions utilisateur
- *
  * @license GPL-3.0
  * @link    https://github.com/gtgweb/gtgweb
  */
@@ -20,17 +13,17 @@
 // ── État global ───────────────────────────────────────────────────────────────
 
 const App = {
-  index:   new Map(),   // UID → Task
-  roots:   [],          // Tâches racines (vue courante)
-  all:     [],          // Toutes les tâches (tableau plat)
-  config:  {},          // Config UI (Storage)
+  index:       new Map(),
+  roots:       [],
+  all:         [],
+  config:      {},
+  pendingTask: null,   // Tâche en cours d'édition — sauvegardée à la fermeture
 };
 
 // ── Démarrage ─────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
   App.config = Storage.loadConfig();
-
   UI.init(App.config, handleAction);
 
   if (Storage.hasCredentials()) {
@@ -44,58 +37,39 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // ── Chargement et rendu ───────────────────────────────────────────────────────
 
-/**
- * Charge toutes les tâches et rend l'interface principale.
- */
 async function loadAndRender() {
   UI.setSyncState('syncing');
-
   try {
     const items = await CalDAV.fetchAll();
     App.all     = Parser.parseTasks(items);
-
-    const { index, roots, orphans } = Tree.build(App.all);
+    const { index, orphans } = Tree.build(App.all);
     App.index = index;
-
     if (orphans.length > 0) {
       console.warn(`gtgWeb : ${orphans.length} tâche(s) orpheline(s) (parent introuvable)`);
     }
-
     renderCurrentView();
     UI.setSyncState('done');
-
   } catch (e) {
     console.error('gtgWeb : erreur chargement', e);
     UI.setSyncState('error', 'Impossible de charger les tâches.');
   }
 }
 
-/**
- * Rend la vue courante avec les filtres actifs.
- */
 function renderCurrentView() {
   const { activeView, activeTag } = App.config;
 
-  // Filtrer par vue (open / actionable / closed)
   let tasks = Tree.filterByView(App.all, App.index, activeView);
+  if (activeTag) tasks = Tree.filterByTag(tasks, activeTag);
 
-  // Filtrer par tag
-  if (activeTag) {
-    tasks = Tree.filterByTag(tasks, activeTag);
-  }
-
-  // Compteurs pour les onglets (toujours sur toutes les tâches)
   const counts = {
     open:       Tree.filterByView(App.all, App.index, 'open').length,
     actionable: Tree.filterByView(App.all, App.index, 'actionable').length,
     closed:     Tree.filterByView(App.all, App.index, 'closed').length,
   };
 
-  // Reconstruire l'arbre pour la vue filtrée
   const { roots } = Tree.build(tasks);
   App.roots = roots;
 
-  // Tags pour la barre latérale (depuis les tâches ouvertes)
   const openTasks = Tree.filterByView(App.all, App.index, 'open');
   const tagList   = Tree.buildTagList(openTasks);
   const untagged  = Tree.countUntagged(openTasks);
@@ -105,47 +79,31 @@ function renderCurrentView() {
 
 // ── Gestionnaire d'actions ────────────────────────────────────────────────────
 
-/**
- * Point central de traitement des actions utilisateur.
- * Toutes les actions UI passent par ici.
- * @param {string} action  Nom de l'action
- * @param {Object} payload Données de l'action
- */
 async function handleAction(action, payload) {
   switch (action) {
 
-    // ── Connexion ──────────────────────────────────────────────────────────
     case 'login': {
       const { url, username, password, persist } = payload;
-
       if (!url || !username || !password) {
         UI.renderLogin('Veuillez remplir tous les champs.');
         return;
       }
-
       CalDAV.init(url, username, password);
       UI.setSyncState('syncing');
-
       const result = await CalDAV.testConnection();
-
-      if (!result.ok) {
-        UI.renderLogin(result.error);
-        return;
-      }
-
+      if (!result.ok) { UI.renderLogin(result.error); return; }
       Storage.saveCredentials({ url, username, password }, persist);
       await loadAndRender();
       break;
     }
 
-    // ── Déconnexion ────────────────────────────────────────────────────────
     case 'logout': {
       Storage.clearCredentials();
+      App.pendingTask = null;
       UI.renderLogin();
       break;
     }
 
-    // ── Changement de vue ──────────────────────────────────────────────────
     case 'changeView': {
       App.config.activeView = payload.view;
       Storage.saveConfig({ activeView: payload.view });
@@ -153,7 +111,6 @@ async function handleAction(action, payload) {
       break;
     }
 
-    // ── Filtre par tag ─────────────────────────────────────────────────────
     case 'filterTag': {
       App.config.activeTag = payload.tag || null;
       Storage.saveConfig({ activeTag: payload.tag || null });
@@ -161,22 +118,18 @@ async function handleAction(action, payload) {
       break;
     }
 
-    // ── Déplier/replier une tâche ──────────────────────────────────────────
     case 'toggleTask': {
       UI.toggleExpanded(payload.uid);
       renderCurrentView();
       break;
     }
 
-    // ── Tout déplier / replier ─────────────────────────────────────────────
     case 'toggleAll': {
-      const allUids = App.all.map(t => t.uid);
-      UI.toggleAll(allUids);
+      UI.toggleAll(App.all.map(t => t.uid));
       renderCurrentView();
       break;
     }
 
-    // ── Aperçu note ────────────────────────────────────────────────────────
     case 'toggleExcerpt': {
       App.config.showExcerpt = !App.config.showExcerpt;
       Storage.saveConfig({ showExcerpt: App.config.showExcerpt });
@@ -184,88 +137,92 @@ async function handleAction(action, payload) {
       break;
     }
 
-    // ── Ouvrir l'éditeur ───────────────────────────────────────────────────
     case 'openTask': {
+      // Ouvrir une tâche existante
+      App.pendingTask = { ...payload.task };
       UI.renderEditor(payload.task);
       break;
     }
 
-    // ── Nouvelle tâche ─────────────────────────────────────────────────────
     case 'newTask': {
+      // Nouvelle tâche — stockée en pending jusqu'à la sauvegarde explicite
       const uid  = Builder.generateUID();
       const task = {
-        uid,
-        title:       '',
-        status:      'NEEDS-ACTION',
-        description: '',
-        tags:        [],
-        due:         null,
-        start:       null,
-        fuzzy:       null,
-        children:    [],
-        parent:      null,
-        sequence:    0,
-        etag:        '',
-        raw:         '',
+        uid, title: '', status: 'NEEDS-ACTION', description: '',
+        tags: [], due: null, start: null, fuzzy: null,
+        children: [], parent: null, sequence: 0, etag: '', raw: '',
       };
+      App.pendingTask = { ...task };
       UI.renderEditor(task);
       break;
     }
 
-    // ── Changement titre dans l'éditeur ───────────────────────────────────
+    // Mise à jour locale uniquement — pas de sauvegarde réseau
     case 'editorTitleChange': {
-      const updated = { ...payload.task, title: payload.title };
-      await _saveTask(updated);
+      if (App.pendingTask) App.pendingTask.title = payload.title;
       break;
     }
 
-    // ── Changement corps dans l'éditeur ───────────────────────────────────
     case 'editorChange': {
       const { task, text, parsed } = payload;
-
-      // Fusionner les tags détectés avec les tags existants
-      const { toAdd } = Editor.diffTags(task.tags, parsed.tags);
-      const newTags   = [...new Set([...task.tags, ...parsed.tags])];
-
-      // Gérer les sous-tâches détectées
-      for (const subtaskTitle of parsed.subtasks) {
-        await _ensureSubtask(task, subtaskTitle);
+      if (App.pendingTask) {
+        App.pendingTask.description = text;
+        App.pendingTask.tags        = [...new Set([...task.tags, ...parsed.tags])];
+        App.pendingTask.subtasks    = parsed.subtasks;
       }
-
-      const updated = { ...task, description: text, tags: newTags };
-      await _saveTask(updated);
       break;
     }
 
-    // ── Changement date dans l'éditeur ────────────────────────────────────
     case 'editorDateChange': {
-      const { task, field, fuzzy, date } = payload;
-      let updated;
-
-      if (field === 'due') {
-        updated = { ...task, fuzzy: fuzzy || null, due: date };
-      } else {
-        updated = { ...task, start: date };
+      const { field, fuzzy, date } = payload;
+      if (App.pendingTask) {
+        if (field === 'due') { App.pendingTask.fuzzy = fuzzy || null; App.pendingTask.due = date; }
+        else { App.pendingTask.start = date; }
       }
-
-      await _saveTask(updated);
       break;
     }
 
-    // ── Marquer comme fait / rouvrir ───────────────────────────────────────
+    // Sauvegarde explicite — déclenchée par le bouton ← dans l'éditeur
+    case 'saveAndClose': {
+      if (App.pendingTask) {
+        const task = App.pendingTask;
+
+        if (!task.title || !task.title.trim()) {
+          // Titre vide → abandon silencieux
+          App.pendingTask = null;
+          UI.closeEditor();
+          break;
+        }
+
+        task.title = task.title.trim();
+
+        // Créer les sous-tâches détectées
+        if (task.subtasks && task.subtasks.length > 0) {
+          for (const subtaskTitle of task.subtasks) {
+            await _ensureSubtask(task, subtaskTitle);
+          }
+        }
+
+        await _saveTask(task);
+        App.pendingTask = null;
+        await loadAndRender();
+      }
+      UI.closeEditor();
+      break;
+    }
+
     case 'toggleDone': {
       const { task } = payload;
-      const newStatus = task.status === 'COMPLETED' ? 'NEEDS-ACTION' : 'COMPLETED';
-      const updated   = { ...task, status: newStatus };
+      const updated = { ...task, status: task.status === 'COMPLETED' ? 'NEEDS-ACTION' : 'COMPLETED' };
       await _saveTask(updated);
       await loadAndRender();
       break;
     }
 
-    // ── Ignorer une tâche ──────────────────────────────────────────────────
     case 'dismissTask': {
       const updated = { ...payload.task, status: 'CANCELLED' };
       await _saveTask(updated);
+      App.pendingTask = null;
       await loadAndRender();
       break;
     }
@@ -274,42 +231,27 @@ async function handleAction(action, payload) {
 
 // ── Helpers de sauvegarde ─────────────────────────────────────────────────────
 
-/**
- * Sauvegarde une tâche sur le serveur CalDAV.
- * Crée ou met à jour selon l'existence du raw.
- * @param {Object} task
- */
 async function _saveTask(task) {
   UI.setSyncState('syncing');
-
   try {
-    const ical = task.raw
-      ? Builder.updateVTODO(task)
-      : Builder.createVTODO(task);
-
+    const ical   = task.raw ? Builder.updateVTODO(task) : Builder.createVTODO(task);
     let result;
 
     if (!task.raw) {
-      // Nouvelle tâche
       await CalDAV.create(task.uid, ical);
       result = { ok: true, conflict: false };
     } else {
-      // Mise à jour
       result = await CalDAV.update(task.uid, ical, task.etag);
     }
 
     if (result.conflict) {
-      // Conflit — recharger depuis le serveur
-      console.warn(`gtgWeb : conflit sur ${task.uid} — rechargement`);
+      console.warn(`gtgWeb : conflit sur ${task.uid}`);
       UI.setSyncState('error', 'Conflit détecté — rechargement…');
       await loadAndRender();
       return;
     }
 
-    // Mettre à jour le cache local
-    const fresh = { ...task, raw: ical, sequence: (task.sequence || 0) + 1 };
-    App.index.set(task.uid, fresh);
-
+    App.index.set(task.uid, { ...task, raw: ical, sequence: (task.sequence || 0) + 1 });
     UI.setSyncState('done');
 
   } catch (e) {
@@ -318,41 +260,18 @@ async function _saveTask(task) {
   }
 }
 
-/**
- * S'assure qu'une sous-tâche existe pour un titre donné.
- * Si elle existe déjà (même titre, même parent), ne crée pas de doublon.
- * @param {Object} parentTask
- * @param {string} subtaskTitle
- */
 async function _ensureSubtask(parentTask, subtaskTitle) {
-  // Vérifier si une sous-tâche avec ce titre existe déjà
-  const existingChildren = Tree.getChildren(parentTask, App.index);
-  const exists = existingChildren.some(c =>
-    c.title.toLowerCase() === subtaskTitle.toLowerCase()
-  );
-
+  const exists = Tree.getChildren(parentTask, App.index)
+    .some(c => c.title.toLowerCase() === subtaskTitle.toLowerCase());
   if (exists) return;
 
-  // Créer la sous-tâche
   const uid  = Builder.generateUID();
   const task = {
-    uid,
-    title:    subtaskTitle,
-    status:   'NEEDS-ACTION',
-    tags:     [],
-    parent:   parentTask.uid,
-    children: [],
-    sequence: 0,
-    etag:     '',
-    raw:      '',
+    uid, title: subtaskTitle, status: 'NEEDS-ACTION',
+    tags: [], parent: parentTask.uid, children: [],
+    sequence: 0, etag: '', raw: '',
   };
 
   await _saveTask(task);
-
-  // Mettre à jour le parent avec le nouvel enfant
-  const updatedParent = {
-    ...parentTask,
-    children: [...parentTask.children, uid],
-  };
-  await _saveTask(updatedParent);
+  await _saveTask({ ...parentTask, children: [...parentTask.children, uid] });
 }
