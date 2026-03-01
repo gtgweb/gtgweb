@@ -19,6 +19,7 @@ const App = {
 document.addEventListener('DOMContentLoaded', async () => {
   App.config = Storage.loadConfig();
   UI.init(App.config, handleAction);
+  UI.applyTheme(App.config.theme || 'auto');
 
   if (Storage.hasCredentials()) {
     const creds = Storage.loadCredentials();
@@ -146,10 +147,14 @@ async function handleAction(action, payload) {
     }
 
     case 'saveSettings': {
-      const { url, username, password, calendarName, persist } = payload;
+      const { url, username, password, calendarName, persist, theme, showExcerpt } = payload;
       Storage.saveCredentials({ url, username, password, calendarName }, persist);
       App.calendarName = calendarName;
       CalDAV.init(url, username, password);
+      App.config.theme       = theme;
+      App.config.showExcerpt = showExcerpt;
+      Storage.saveConfig({ theme, showExcerpt });
+      UI.applyTheme(theme);
       UI.closeSettings();
       await loadAndRender();
       break;

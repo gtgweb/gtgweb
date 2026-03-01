@@ -122,7 +122,6 @@ const UI = (() => {
   // ── Paramètres ────────────────────────────────────────────────────────────
 
   function renderSettings(creds, calendarName) {
-    // Panneau modal par-dessus l'interface
     let overlay = document.getElementById('settings-overlay');
     if (!overlay) {
       overlay = document.createElement('div');
@@ -130,6 +129,9 @@ const UI = (() => {
       overlay.className = 'settings-overlay';
       document.body.appendChild(overlay);
     }
+
+    const theme       = _config.theme || 'auto';
+    const showExcerpt = _config.showExcerpt || false;
 
     overlay.innerHTML = `
       <div class="settings-panel">
@@ -139,6 +141,9 @@ const UI = (() => {
         </header>
 
         <div class="settings-body">
+
+          <div class="settings-section-title">Connexion</div>
+
           <div class="form-group">
             <label>URL du proxy</label>
             <input type="url" id="set-url" value="${_escape(creds.url || '')}" />
@@ -160,6 +165,34 @@ const UI = (() => {
             <input type="checkbox" id="set-persist" ${Storage.isPersistent() ? 'checked' : ''} />
             <label for="set-persist">Se souvenir de moi</label>
           </div>
+
+          <div class="settings-section-title">Affichage</div>
+
+          <div class="form-group">
+            <label>Thème</label>
+            <div class="theme-picker">
+              <label class="theme-option ${theme === 'light' ? 'theme-option--active' : ''}">
+                <input type="radio" name="theme" value="light" ${theme === 'light' ? 'checked' : ''} /> ☀️ Clair
+              </label>
+              <label class="theme-option ${theme === 'auto' ? 'theme-option--active' : ''}">
+                <input type="radio" name="theme" value="auto"  ${theme === 'auto'  ? 'checked' : ''} /> 🖥️ Auto
+              </label>
+              <label class="theme-option ${theme === 'dark' ? 'theme-option--active' : ''}">
+                <input type="radio" name="theme" value="dark"  ${theme === 'dark'  ? 'checked' : ''} /> 🌙 Sombre
+              </label>
+            </div>
+          </div>
+          <div class="form-group form-group--inline">
+            <input type="checkbox" id="set-excerpt" ${showExcerpt ? 'checked' : ''} />
+            <label for="set-excerpt">Aperçu note (100 premiers caractères)</label>
+          </div>
+
+          <div class="settings-section-title">Info proxy</div>
+          <div class="form-group">
+            <label>URL configurée</label>
+            <div class="proxy-info">${_escape(creds.url || '(non configuré)')}</div>
+          </div>
+
         </div>
 
         <div class="settings-footer">
@@ -171,6 +204,15 @@ const UI = (() => {
 
     overlay.classList.remove('hidden');
 
+    // Highlight thème sélectionné en temps réel
+    overlay.querySelectorAll('input[name="theme"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        overlay.querySelectorAll('.theme-option').forEach(l => l.classList.remove('theme-option--active'));
+        radio.closest('.theme-option').classList.add('theme-option--active');
+        applyTheme(radio.value);
+      });
+    });
+
     document.getElementById('btn-close-settings').addEventListener('click', closeSettings);
     overlay.addEventListener('click', e => { if (e.target === overlay) closeSettings(); });
 
@@ -181,6 +223,8 @@ const UI = (() => {
         password:     document.getElementById('set-password').value,
         calendarName: document.getElementById('set-calname').value.trim(),
         persist:      document.getElementById('set-persist').checked,
+        theme:        overlay.querySelector('input[name="theme"]:checked').value,
+        showExcerpt:  document.getElementById('set-excerpt').checked,
       });
     });
 
@@ -188,6 +232,13 @@ const UI = (() => {
       closeSettings();
       _onAction('logout', {});
     });
+  }
+
+  function applyTheme(theme) {
+    const root = document.documentElement;
+    root.classList.remove('theme-light', 'theme-dark');
+    if (theme === 'light') root.classList.add('theme-light');
+    if (theme === 'dark')  root.classList.add('theme-dark');
   }
 
   function closeSettings() {
@@ -204,7 +255,7 @@ const UI = (() => {
     app.innerHTML = `
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
-          <span class="sidebar-logo">gtg<span>Web</span></span>
+          <a class="sidebar-logo" href="https://github.com/gtgweb/gtgweb" target="_blank" rel="noopener">gtg<span>Web</span></a>
           <button class="btn btn--icon" id="btn-settings" title="Paramètres">⚙</button>
         </div>
         <nav class="tag-list" id="tag-list"></nav>
@@ -663,7 +714,7 @@ const UI = (() => {
   return {
     init, renderLogin, renderCalendarPicker, renderSettings, closeSettings,
     renderMain, renderTaskList, renderTagList, renderEditor, closeEditor,
-    setSyncState, toggleExpanded, toggleAll,
+    setSyncState, toggleExpanded, toggleAll, applyTheme,
   };
 
 })();

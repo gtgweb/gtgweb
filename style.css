@@ -260,7 +260,10 @@ a { text-decoration: none; color: inherit; }
   font-size: 1.1rem;
   font-weight: 700;
   color: var(--accent);
+  text-decoration: none;
 }
+
+.sidebar-logo:hover { text-decoration: underline; }
 
 .sidebar-logo span { color: var(--text-muted); font-weight: 400; }
 
@@ -679,6 +682,32 @@ a { text-decoration: none; color: inherit; }
 
 .search-toggle { display: none; }
 
+/* ── Barre de recherche ─────────────────────────────────────────────────────── */
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.search-input {
+  width: 180px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.8rem;
+  transition: width var(--transition), opacity var(--transition);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.search-toggle { display: none; }
+
 /* ── Responsive mobile ─────────────────────────────────────────────────────── */
 
 @media (max-width: 768px) {
@@ -773,6 +802,70 @@ a { text-decoration: none; color: inherit; }
   gap: var(--space-sm);
   margin-top: var(--space-lg);
   justify-content: flex-end;
+}
+
+.settings-section-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin: var(--space-lg) 0 var(--space-sm);
+  padding-bottom: var(--space-xs);
+  border-bottom: 1px solid var(--border);
+}
+
+.theme-picker {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.theme-option {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.theme-option input[type="radio"] { display: none; }
+
+.theme-option--active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.proxy-info {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  word-break: break-all;
+}
+
+/* ── Thèmes forcés ───────────────────────────────────────────────────────────── */
+
+html.theme-light {
+  --bg:           #ffffff;
+  --bg-secondary: #f6f5f4;
+  --text:         #2e3436;
+  --text-muted:   #888;
+  --border:       #d3d7cf;
+  color-scheme: light;
+}
+
+html.theme-dark {
+  --bg:           #1e1e2e;
+  --bg-secondary: #313244;
+  --text:         #cdd6f4;
+  --text-muted:   #a6adc8;
+  --border:       #45475a;
+  color-scheme: dark;
 }
 
 /* ── Sélecteur de calendrier ────────────────────────────────────────────────── */
