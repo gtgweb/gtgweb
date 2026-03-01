@@ -227,6 +227,13 @@ const UI = (() => {
             </button>
           </div>
           <div class="toolbar-actions">
+            <div class="search-box" id="search-box">
+              <button class="btn btn--icon btn--ghost search-toggle" id="btn-search-toggle" title="Rechercher">🔍</button>
+              <input type="search" class="search-input" id="search-input"
+                     placeholder="Rechercher… @tag sur mobile"
+                     value="${_config.searchQuery || ''}" />
+              <button class="btn btn--icon btn--ghost search-clear hidden" id="btn-search-clear" title="Effacer">✕</button>
+            </div>
             <button class="btn btn--ghost btn--small" id="btn-toggle-all">
               ${_expanded === null ? '⊟ Replier' : '⊞ Déplier'}
             </button>
@@ -253,6 +260,38 @@ const UI = (() => {
     document.getElementById('btn-new-task').addEventListener('click',   () => _onAction('newTask', {}));
     document.getElementById('btn-logout').addEventListener('click',     () => _onAction('logout', {}));
     document.getElementById('btn-settings').addEventListener('click',   () => _onAction('openSettings', {}));
+
+    // ── Recherche ──────────────────────────────────────────────────────────
+    const searchInput  = document.getElementById('search-input');
+    const searchClear  = document.getElementById('btn-search-clear');
+    const searchToggle = document.getElementById('btn-search-toggle');
+    const searchBox    = document.getElementById('search-box');
+
+    if (_config.searchQuery || _config.searchOpen) {
+      searchBox.classList.add('search-box--open');
+    }
+    if (_config.searchQuery) searchClear.classList.remove('hidden');
+
+    searchToggle.addEventListener('click', () => {
+      const isOpen = searchBox.classList.toggle('search-box--open');
+      _config.searchOpen = isOpen;
+      if (isOpen) searchInput.focus();
+    });
+
+    searchInput.addEventListener('input', Editor.debounce(e => {
+      const q = e.target.value;
+      searchClear.classList.toggle('hidden', !q);
+      _config.searchOpen = true;
+      _onAction('search', { query: q });
+    }, 250));
+
+    searchClear.addEventListener('click', () => {
+      searchInput.value = '';
+      searchClear.classList.add('hidden');
+      _config.searchOpen = true;
+      searchInput.focus();
+      _onAction('search', { query: '' });
+    });
   }
 
   // ── Tags sidebar ──────────────────────────────────────────────────────────

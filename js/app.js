@@ -50,11 +50,41 @@ async function loadAndRender() {
   }
 }
 
+function _applyFilters(tasks) {
+  const { activeTag } = App.config;
+  if (activeTag) tasks = Tree.filterByTag(tasks, activeTag);
+
+  const q = (App.config.searchQuery || '').trim();
+  if (q) {
+    const tagMatches = q.match(/@(\S+)/g) || [];
+    const textQuery  = q.replace(/@\S+/g, '').trim().toLowerCase();
+    if (tagMatches.length > 0) {
+      for (const tm of tagMatches) tasks = Tree.filterByTag(tasks, tm.slice(1));
+    }
+    if (textQuery) {
+      tasks = tasks.filter(t =>
+        (t.title       || '').toLowerCase().includes(textQuery) ||
+        (t.description || '').toLowerCase().includes(textQuery)
+      );
+    }
+  }
+  return tasks;
+}
+
+function renderListOnly() {
+  const { activeView } = App.config;
+  let tasks = Tree.filterByView(App.all, App.index, activeView);
+  tasks = _applyFilters(tasks);
+  const { roots } = Tree.build(tasks);
+  App.roots = roots;
+  UI.renderTaskList(roots, App.index);
+}
+
 function renderCurrentView() {
-  const { activeView, activeTag } = App.config;
+  const { activeView } = App.config;
 
   let tasks = Tree.filterByView(App.all, App.index, activeView);
-  if (activeTag) tasks = Tree.filterByTag(tasks, activeTag);
+  tasks = _applyFilters(tasks);
 
   const counts = {
     open:       Tree.filterByView(App.all, App.index, 'open').length,
@@ -145,6 +175,12 @@ async function handleAction(action, payload) {
       App.config.activeTag = payload.tag || null;
       Storage.saveConfig({ activeTag: payload.tag || null });
       renderCurrentView();
+      break;
+    }
+
+    case 'search': {
+      App.config.searchQuery = payload.query || '';
+      renderListOnly();
       break;
     }
 
