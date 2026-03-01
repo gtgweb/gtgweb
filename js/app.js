@@ -258,6 +258,16 @@ async function handleAction(action, payload) {
       break;
     }
 
+    // ── Rouvrir (NEEDS-ACTION) ──────────────────────────────────────────────
+    case 'reopenTask': {
+      const updated = { ...payload.task, status: 'NEEDS-ACTION' };
+      await _saveTask(updated);
+      App.pendingTask = null;
+      UI.closeEditor();
+      await loadAndRender();
+      break;
+    }
+
     // ── Ignorer (CANCELLED) ─────────────────────────────────────────────────
     case 'dismissTask': {
       const updated = { ...payload.task, status: 'CANCELLED' };

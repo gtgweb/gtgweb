@@ -471,8 +471,11 @@ const UI = (() => {
         <div class="editor-tokens" id="editor-tokens"></div>
 
         <div class="editor-actions">
-          <button class="btn btn--success" id="btn-done">✓ Marquer comme fait</button>
-          <button class="btn btn--warning" id="btn-dismiss">⊘ Ignorer</button>
+          ${task.status === 'COMPLETED' || task.status === 'CANCELLED'
+            ? `<button class="btn btn--success" id="btn-reopen">↺ Rouvrir</button>`
+            : `<button class="btn btn--success" id="btn-done">✓ Marquer comme fait</button>
+               <button class="btn btn--warning" id="btn-dismiss">⊘ Abandonner</button>`
+          }
           ${!isNew ? `<button class="btn btn--danger" id="btn-delete">🗑 Supprimer</button>` : ''}
         </div>
       </div>
@@ -532,13 +535,18 @@ const UI = (() => {
     document.getElementById('btn-cancel-editor').addEventListener('click', () =>
       _onAction('cancelEdit', {}));
 
-    document.getElementById('btn-done').addEventListener('click', () => {
-      _onAction('toggleDone', { uid: task.uid, task });
-    });
-
-    document.getElementById('btn-dismiss').addEventListener('click', () => {
-      _onAction('dismissTask', { uid: task.uid, task });
-    });
+    if (task.status === 'COMPLETED' || task.status === 'CANCELLED') {
+      document.getElementById('btn-reopen').addEventListener('click', () => {
+        _onAction('reopenTask', { uid: task.uid, task });
+      });
+    } else {
+      document.getElementById('btn-done').addEventListener('click', () => {
+        _onAction('toggleDone', { uid: task.uid, task });
+      });
+      document.getElementById('btn-dismiss').addEventListener('click', () => {
+        _onAction('dismissTask', { uid: task.uid, task });
+      });
+    }
 
     if (!isNew) {
       document.getElementById('btn-delete').addEventListener('click', () => {

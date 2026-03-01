@@ -193,7 +193,20 @@ const CalDAV = (() => {
 
   async function remove(uid, etag = '') {
     const headers = {};
-    if (etag) headers['If-Match'] = etag;
+
+    // GET frais pour récupérer l'ETag courant — même logique que update()
+    try {
+      const getResp = await _request('GET', uid + '.ics');
+      if (getResp.ok) {
+        const freshEtag = getResp.headers.get('ETag');
+        if (freshEtag) headers['If-Match'] = freshEtag;
+      }
+    } catch (e) {
+      // GET échoué — on tente le DELETE sans If-Match
+      console.warn('gtgWeb CalDAV : GET frais échoué, DELETE sans If-Match', e);
+      if (etag) headers['If-Match'] = etag;
+    }
+
     const response = await _request('DELETE', uid + '.ics', { headers });
     if (!response.ok && response.status !== 204) {
       throw new Error(`remove(${uid}) échoué : HTTP ${response.status}`);
