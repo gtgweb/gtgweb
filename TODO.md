@@ -44,14 +44,21 @@ historiques `gtgweb-<timestamp>-<aléa>@gtgweb` cassent l'import (GTG #1289).
 
 ### Priorité haute
 
-- **Sous-tâches non affichées dans gtgWeb** : créées via gtgWeb, elles apparaissent
-  dans GTG desktop mais pas dans gtgWeb (orphelines signalées en console).
-  Reconstruction du lien parent→enfant à la lecture (tree.js / parser.js) à corriger.
+- **Sélecteur de calendrier en trompe-l'œil** : le calendrier choisi (`calendarName`)
+  décore le VTODO mais ne pilote PAS l'URL cible. Les requêtes visent le calendrier
+  figé dans `proxy-config.php` (`$CALDAV_URL`), pas celui sélectionné. `CalDAV.init`
+  ne reçoit jamais `calendarName`. La sélection doit réellement changer l'URL cible.
+- **Filtrer les calendriers VTODO** : le sélecteur propose tous les calendriers, y
+  compris ceux de type VEVENT. Choisir un calendrier d'événements produit un 403
+  (`InvalidComponentType`) à la création. N'afficher que les calendriers acceptant
+  les VTODO, ou avertir clairement si l'utilisateur en choisit un autre.
+- **Test de connexion avant validation du calendrier** : valider un calendrier sans
+  vérifier qu'une écriture VTODO y est possible mène à une config qui ne marche pas.
+  Tester (PROPFIND + capacité VTODO) avant de valider le choix.
+- **Mode debug/verbose** : ajouter un mode qui affiche les URL cibles, codes HTTP et
+  en-têtes, pour diagnostiquer sans sonde manuelle côté serveur.
 - **Éditeur s'ouvre au démarrage** : `App.pendingTask` non null au chargement,
   une tâche vide se crée sans action utilisateur (app.js).
-- **Serveur de test désynchronisé** : proxy.php répondait 404 (régression, origine
-  inconnue) et l'écart entre fichiers déployés et git n'est pas connu.
-  Audit et redéploiement propre depuis git nécessaires.
 
 ### Priorité moyenne
 
@@ -64,15 +71,17 @@ historiques `gtgweb-<timestamp>-<aléa>@gtgweb` cassent l'import (GTG #1289).
 
 - **icons/icon-192.png absent du dépôt** : icône PWA en 404 (référencée par index.html et manifest.json).
 - **Pas de bouton ↺ rechargement** dans la toolbar.
-- **Proxy `?action=calendars`** (liste des calendriers à la connexion) : régression 401, à déboguer avant redéploiement.
+- ~~Proxy `?action=calendars` régression 401~~ : RÉSOLU 2026-07-12, le proxy ne transmettait pas l'en-tête Authorization sans HTTP_AUTHORIZATION (commit 7f139fc).
 
 ---
 
 ## 📋 Backlog v1 (avant release publique)
 
-- [ ] Audit et redéploiement propre du serveur de test depuis git
+- [x] ~~Audit et redéploiement propre du serveur depuis git~~ (fait 2026-07-12, www ISO git)
 - [ ] Re-valider sur le terrain : recherche (desktop, mobile, @tag) et Rouvrir
-- [ ] Fix sous-tâches orphelines
+- [ ] Corriger la tuyauterie du sélecteur de calendrier (piloter l'URL cible)
+- [ ] Filtrer/valider les calendriers VTODO + test de connexion préalable
+- [ ] Mode debug/verbose
 - [ ] Fix éditeur au démarrage
 - [ ] Fix scroll sidebar
 - [ ] Notifications utilisateur (orphelines, erreurs réseau)
