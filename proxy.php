@@ -130,6 +130,17 @@ foreach ($_SERVER as $key => $value) {
     if ($key === 'CONTENT_LENGTH') $headers[] = 'Content-Length: ' . $value;
 }
 
+// Injecter l'en-tete d'authentification reconstruit ($AUTH_HEADER).
+// Certains serveurs (Apache/CGI) n'exposent pas HTTP_AUTHORIZATION dans $_SERVER,
+// donc la boucle ci-dessus ne recopie pas l'auth : on l'ajoute explicitement.
+// On retire d'abord tout Authorization deja present pour eviter un doublon d'en-tete.
+$headers = array_filter($headers, function ($h) {
+    return stripos($h, 'Authorization:') !== 0;
+});
+if ($AUTH_HEADER !== '') {
+    $headers[] = 'Authorization: ' . $AUTH_HEADER;
+}
+
 $body = file_get_contents('php://input');
 
 $ch = curl_init($target_url);
