@@ -178,7 +178,19 @@ const Builder = (() => {
   }
 
   function generateUID() {
-    return `gtgweb-${Date.now()}-${Math.random().toString(36).substring(2, 10)}@gtgweb`;
+    // UUID v4 canonique (RFC 4122), requis par le coeur GTG 0.7 (UUID strict).
+    // Les UID historiques gtgweb-<timestamp>-<alea>@gtgweb restent inchanges
+    // sur les taches existantes (identite CalDAV), voir GTG #1289.
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    // Repli (Firefox < 95, absence de randomUUID) : v4 via getRandomValues.
+    const b = crypto.getRandomValues(new Uint8Array(16));
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    const h = Array.from(b, function(x) { return x.toString(16).padStart(2, '0'); }).join('');
+    return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-'
+         + h.slice(16, 20) + '-' + h.slice(20);
   }
 
   function nowIcal() {
