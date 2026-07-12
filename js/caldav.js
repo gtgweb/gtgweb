@@ -14,11 +14,13 @@ const CalDAV = (() => {
   let _url      = '';
   let _username = '';
   let _password = '';
+  let _calPath  = '';   // segment technique du calendrier choisi (ex: 'tches'), '' = racine directe
 
-  function init(url, username, password) {
+  function init(url, username, password, calendarPath = '') {
     _url      = url.endsWith('/') ? url : url + '/';
     _username = username;
     _password = password;
+    _calPath  = calendarPath ? calendarPath.replace(/^\/+|\/+$/g, '') : '';
   }
 
   function _authHeader() {
@@ -26,7 +28,9 @@ const CalDAV = (() => {
   }
 
   async function _request(method, path = '', options = {}) {
-    const url = _url + path;
+    // Cible = proxy + segment calendrier choisi + fichier .ics
+    const prefix = _calPath ? _calPath + '/' : '';
+    const url = _url + prefix + path;
     const headers = { 'Authorization': _authHeader(), ...options.headers };
     const config  = { method, headers };
     if (options.body !== undefined) config.body = options.body;
@@ -86,11 +90,19 @@ const CalDAV = (() => {
         const name = nameEl.textContent.trim();
         if (!name) continue;
 
-        // Reconstruire l'URL absolue
-        const proxyBase = _url.endsWith('/') ? _url.slice(0, -1) : _url;
-        // L'URL du calendrier sera proxy.php + PATH mais on stocke le nom
-        // et l'utilisateur choisit — le proxy-config.php gère l'URL réelle
-        results.push({ name, href });
+        // Ne garder que les calendriers acceptant les VTODO (taches).
+        // Un calendrier d'evenements (VEVENT seul) provoquerait un 403 InvalidComponentType.
+        const comps = resp.getElementsByTagNameNS(NS_CALDAV, 'comp');
+        let acceptsVTODO = false;
+        for (const c of comps) {
+          if ((c.getAttribute('name') || '').toUpperCase() === 'VTODO') { acceptsVTODO = true; break; }
+        }
+        if (!acceptsVTODO) continue;
+
+        // Segment technique = dernier morceau du href (ex: '/.../testgtg/tches/' -> 'tches').
+        const segment = href.replace(/\/+$/g, '').split('/').pop();
+
+        results.push({ name, href, segment });
       }
     } catch (e) {
       console.error('gtgWeb CalDAV : erreur parsing liste calendriers', e);

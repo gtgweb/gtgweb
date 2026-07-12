@@ -19,10 +19,11 @@ const Storage = (() => {
 
   function saveCredentials(creds, persist = false) {
     const data = JSON.stringify({
-      url:          creds.url,
-      username:     creds.username,
-      password:     creds.password,
-      calendarName: creds.calendarName || '',
+      url:             creds.url,
+      username:        creds.username,
+      password:        creds.password,
+      calendarName:    creds.calendarName || '',
+      calendarSegment: creds.calendarSegment || '',
     });
     if (persist) {
       localStorage.setItem(KEY_CREDENTIALS, data);

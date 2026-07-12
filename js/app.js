@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (Storage.hasCredentials()) {
     const creds = Storage.loadCredentials();
     App.calendarName = creds.calendarName || '';
-    CalDAV.init(creds.url, creds.username, creds.password);
+    CalDAV.init(creds.url, creds.username, creds.password, creds.calendarSegment || '');
     await loadAndRender();
   } else {
     UI.renderLogin();
@@ -134,8 +134,8 @@ async function handleAction(action, payload) {
 
     // ── Étape 2 : choix du calendrier ──────────────────────────────────────
     case 'calendarSelected': {
-      const { loginPayload, calendarName, persist } = payload;
-      await _finalizeLogin(loginPayload, calendarName, persist);
+      const { loginPayload, calendarName, calendarSegment, persist } = payload;
+      await _finalizeLogin(loginPayload, calendarName, calendarSegment, persist);
       break;
     }
 
@@ -148,9 +148,11 @@ async function handleAction(action, payload) {
 
     case 'saveSettings': {
       const { url, username, password, calendarName, persist, theme, showExcerpt } = payload;
-      Storage.saveCredentials({ url, username, password, calendarName }, persist);
+      const prev = Storage.loadCredentials() || {};
+      const seg  = prev.calendarSegment || '';
+      Storage.saveCredentials({ url, username, password, calendarName, calendarSegment: seg }, persist);
       App.calendarName = calendarName;
-      CalDAV.init(url, username, password);
+      CalDAV.init(url, username, password, seg);
       App.config.theme       = theme;
       App.config.showExcerpt = showExcerpt;
       Storage.saveConfig({ theme, showExcerpt });
@@ -342,14 +344,16 @@ async function handleAction(action, payload) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function _finalizeLogin(loginPayload, calendarName, persist) {
+async function _finalizeLogin(loginPayload, calendarName, calendarSegment, persist) {
   Storage.saveCredentials({
-    url:          loginPayload.url,
-    username:     loginPayload.username,
-    password:     loginPayload.password,
-    calendarName: calendarName,
+    url:             loginPayload.url,
+    username:        loginPayload.username,
+    password:        loginPayload.password,
+    calendarName:    calendarName,
+    calendarSegment: calendarSegment || '',
   }, persist);
   App.calendarName = calendarName;
+  CalDAV.init(loginPayload.url, loginPayload.username, loginPayload.password, calendarSegment || '');
   await loadAndRender();
 }
 

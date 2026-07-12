@@ -79,10 +79,10 @@ const UI = (() => {
     const app = document.getElementById('app');
     app.className = 'screen-login';
 
-    const items = calendars.map(c => `
+    const items = calendars.map((c, i) => `
       <label class="calendar-item">
-        <input type="radio" name="cal" value="${_escape(c.name)}"
-               ${c.name === detectedName ? 'checked' : ''} />
+        <input type="radio" name="cal" value="${i}"
+               ${c.name === detectedName || i === 0 ? 'checked' : ''} />
         <span class="calendar-name">${_escape(c.name)}</span>
         <span class="calendar-href">${_escape(c.href)}</span>
       </label>
@@ -106,10 +106,12 @@ const UI = (() => {
 
     document.getElementById('btn-cal-select').addEventListener('click', () => {
       const selected = document.querySelector('input[name="cal"]:checked');
-      const calName  = selected ? selected.value : (detectedName || '');
+      const idx = selected ? parseInt(selected.value, 10) : 0;
+      const cal = calendars[idx] || {};
       _onAction('calendarSelected', {
         loginPayload,
-        calendarName: calName,
+        calendarName:    cal.name || detectedName || '',
+        calendarSegment: cal.segment || '',
         persist: document.getElementById('input-persist2').checked,
       });
     });
