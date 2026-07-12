@@ -135,16 +135,17 @@ const Builder = (() => {
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   /**
-   * Construit la liste des catégories en ajoutant DAV_{calendarName}.
-   * C'est ce tag qui permet à GTG desktop d'identifier ses tâches.
+   * Construit la liste des catégories à partir des tags utilisateur.
+   *
+   * NOTE : gtgWeb n'écrit JAMAIS de tag technique DAV_ dans les fichiers.
+   * L'appartenance au calendrier est portée par l'URL CalDAV (le calendrier
+   * cible lui-même), pas par une étiquette visible. GTG desktop 0.6 filtre de
+   * toute façon les tags DAV_ à l'écriture et réassocie ses tâches à l'import
+   * via calendar_url / calendar_name. Le paramètre calendarName est conservé
+   * pour compatibilité de signature avec les appelants, mais n'est plus utilisé.
    */
   function _buildCategories(tags, calendarName) {
-    const cats = (tags || []).map(t => t.replace(/^@/, ''));
-    if (calendarName) {
-      const davTag = 'DAV_' + calendarName;
-      if (!cats.includes(davTag)) cats.push(davTag);
-    }
-    return cats;
+    return (tags || []).map(t => t.replace(/^@/, ''));
   }
 
   /**
