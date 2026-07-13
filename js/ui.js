@@ -578,12 +578,24 @@ const UI = (() => {
     const rich = RichField.attach(richEl, {
       colorFn: (tag) => Storage.tagColor(tag),
       onChange: (lines) => {
-        const text = lines.join('\n');
-        const result = Editor.parse(text);
-        _onAction('editorChange', { uid: task.uid, task, text, parsed: result });
+        // La description exclut la 1re ligne (le titre), sinon le titre
+        // se recopie dans la note et s'empile a chaque sauvegarde.
+        const body = lines.slice(1).join('\n');
+        const result = Editor.parse(body);
+        _onAction('editorChange', { uid: task.uid, task, text: body, parsed: result });
       },
     });
-    rich.setTitleAndBody(task.title || '', task.description || '');
+    // Recomposer le corps facon GTG : les @tags de CATEGORIES absents de la
+    // description sont reinjectes sur une ligne sous le titre (sinon ils
+    // disparaissent du champ, car le correctif DESCRIPTION les retire de la note).
+    const _reTag = /(?<![a-zA-Z0-9._%+\-])@([\wÀ-ÿ][\wÀ-ÿ\-]*)/g;
+    const _desc = task.description || '';
+    const _inDesc = new Set([..._desc.matchAll(_reTag)].map(m => m[1].toLowerCase()));
+    const _missing = (task.tags || []).filter(t => !_inDesc.has(t.toLowerCase()));
+    const _bodyParts = [];
+    if (_missing.length) _bodyParts.push(_missing.map(t => '@' + t).join(' '));
+    if (_desc) _bodyParts.push(_desc);
+    rich.setTitleAndBody(task.title || '', _bodyParts.join('\n'));
     if (window.App) window.App.richField = rich;
 
     // Commence le
