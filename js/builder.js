@@ -13,6 +13,25 @@ const Builder = (() => {
 
   // ── API publique ──────────────────────────────────────────────────────────
 
+  /**
+   * Retire UNIQUEMENT les @tags DE TÊTE de la première ligne de la description
+   * avant écriture CalDAV. Les tags de tête sont des métadonnées (déjà dans
+   * CATEGORIES) ; GTG desktop fait de même dans sa projection CalDAV.
+   * On s'arrête au premier mot qui n'est pas un tag : les @tags dispersés au
+   * milieu du texte sont donc PRÉSERVÉS, comme tout le reste du contenu
+   * (notes, sous-tâches). N'affecte PAS l'affichage éditeur.
+   */
+  function _stripLeadingTags(description) {
+    if (!description) return description;
+    const nlIdx = description.indexOf('\n');
+    const firstLine = nlIdx === -1 ? description : description.slice(0, nlIdx);
+    const rest      = nlIdx === -1 ? ''          : description.slice(nlIdx + 1);
+    const LEAD = /^(?:@[\wÀ-ÿ][\wÀ-ÿ\-]*(?:[ \t]*,?[ \t]*))+/;
+    const cleanedFirst = firstLine.replace(LEAD, '').replace(/^[ \t]+/, '');
+    if (cleanedFirst === '') return rest;
+    return nlIdx === -1 ? cleanedFirst : cleanedFirst + '\n' + rest;
+  }
+
   function createVTODO(task, calendarName) {
     const uid = task.uid || generateUID();
     const now = nowIcal();
@@ -38,7 +57,7 @@ const Builder = (() => {
     _appendDates(lines, task);
 
     if (task.description) {
-      lines.push(`DESCRIPTION:${escapeIcal(task.description)}`);
+      lines.push(`DESCRIPTION:${escapeIcal(_stripLeadingTags(task.description))}`);
     }
 
     if (task.parent) {
@@ -110,7 +129,7 @@ const Builder = (() => {
     _appendDates(updated, task);
 
     if (task.description) {
-      updated.push(`DESCRIPTION:${escapeIcal(task.description)}`);
+      updated.push(`DESCRIPTION:${escapeIcal(_stripLeadingTags(task.description))}`);
     }
 
     if (task.status === 'COMPLETED') {
