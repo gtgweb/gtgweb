@@ -235,8 +235,9 @@ async function handleAction(action, payload) {
     }
 
     case 'editorChange': {
-      const { task, text, parsed } = payload;
+      const { task, newTitle, text, parsed } = payload;
       if (App.pendingTask) {
+        if (newTitle !== undefined) App.pendingTask.title = newTitle;
         App.pendingTask.description = text;
         App.pendingTask.tags        = [...new Set([...task.tags, ...parsed.tags])];
         App.pendingTask.subtasks    = parsed.subtasks;

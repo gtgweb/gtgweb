@@ -578,11 +578,12 @@ const UI = (() => {
     const rich = RichField.attach(richEl, {
       colorFn: (tag) => Storage.tagColor(tag),
       onChange: (lines) => {
-        // La description exclut la 1re ligne (le titre), sinon le titre
-        // se recopie dans la note et s'empile a chaque sauvegarde.
+        // 1re ligne = titre ; le reste = description (le titre ne doit PAS
+        // se recopier dans la note, sinon il s'empile a chaque sauvegarde).
+        const newTitle = (lines[0] || '').trim();
         const body = lines.slice(1).join('\n');
         const result = Editor.parse(body);
-        _onAction('editorChange', { uid: task.uid, task, text: body, parsed: result });
+        _onAction('editorChange', { uid: task.uid, task, newTitle, text: body, parsed: result });
       },
     });
     // Recomposer le corps facon GTG : les @tags de CATEGORIES absents de la
