@@ -904,3 +904,28 @@ html.theme-dark {
   white-space: nowrap;
   max-width: 200px;
 }
+
+/* ── Champ riche façon GTG (éditeur à champ unique) ── */
+.rf-field {
+  border: 1px solid var(--border, #ccc);
+  border-radius: 8px;
+  padding: 14px 16px;
+  min-height: 160px;
+  font-size: 15px;
+  line-height: 1.6;
+  outline: none;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  background: var(--surface, #fff);
+}
+.rf-field:focus { border-color: var(--accent, #007bff); }
+.rf-field .rf-title { font-weight: 700; font-size: 19px; }
+.rf-field .rf-tag {
+  background: color-mix(in srgb, var(--rf-c, var(--blue)) 22%, transparent);
+  color: var(--rf-c, var(--blue));
+  border-radius: 4px;
+  padding: 0 4px;
+  font-weight: 600;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}

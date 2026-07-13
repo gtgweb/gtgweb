@@ -535,9 +535,6 @@ const UI = (() => {
           <button class="btn btn--ghost btn--small"     id="btn-cancel-editor">✕ Annuler</button>
         </header>
 
-        <input type="text" class="editor-title" id="editor-title"
-               value="${_escape(task.title)}" placeholder="Titre de la tâche" />
-
         <div class="editor-dates">
           <div class="date-field">
             <label>Commence le</label>
@@ -557,10 +554,13 @@ const UI = (() => {
           </div>
         </div>
 
-        <textarea class="editor-body" id="editor-body"
-                  placeholder="Notes, @tags...">${_escape(task.description || '')}</textarea>
+        <div class="rf-field" id="editor-rich" contenteditable="true"
+             data-placeholder="Titre, puis @tags et notes..."></div>
 
+        <!-- Zone tokens commentee (les tags sont surlignes dans le champ).
+             Reactivable si besoin :
         <div class="editor-tokens" id="editor-tokens"></div>
+        -->
 
         <div class="editor-actions">
           ${task.status === 'COMPLETED' || task.status === 'CANCELLED'
@@ -573,26 +573,18 @@ const UI = (() => {
       </div>
     `;
 
-    // Titre
-    const titleEl = document.getElementById('editor-title');
-    titleEl.addEventListener('input', Editor.debounce(e => {
-      _onAction('editorTitleChange', { uid: task.uid, task, title: e.target.value });
-    }, 300));
-
-    // Corps
-    const bodyEl   = document.getElementById('editor-body');
-    const tokensEl = document.getElementById('editor-tokens');
-    bodyEl.addEventListener('input', Editor.debounce(e => {
-      const result = Editor.parse(e.target.value);
-      _renderTokens(tokensEl, result.tokens);
-      _onAction('editorChange', { uid: task.uid, task, text: e.target.value, parsed: result });
-    }, 300));
-
-    // Parsing initial
-    if (task.description) {
-      const result = Editor.parse(task.description);
-      _renderTokens(tokensEl, result.tokens);
-    }
+    // Champ riche unique facon GTG : titre (1re ligne) + tags surlignes + note.
+    const richEl = document.getElementById('editor-rich');
+    const rich = RichField.attach(richEl, {
+      colorFn: (tag) => Storage.tagColor(tag),
+      onChange: (lines) => {
+        const text = lines.join('\n');
+        const result = Editor.parse(text);
+        _onAction('editorChange', { uid: task.uid, task, text, parsed: result });
+      },
+    });
+    rich.setTitleAndBody(task.title || '', task.description || '');
+    if (window.App) window.App.richField = rich;
 
     // Commence le
     document.getElementById('input-start').addEventListener('change', e => {

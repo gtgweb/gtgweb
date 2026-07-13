@@ -258,15 +258,13 @@ async function handleAction(action, payload) {
       if (App.pendingTask) {
         const task = App.pendingTask;
 
-        // Lire les valeurs DOM directement — le debounce peut ne pas avoir tiré
-        const titleEl = document.getElementById('editor-title');
-        const bodyEl  = document.getElementById('editor-body');
-        if (titleEl) task.title       = titleEl.value.trim();
-        if (bodyEl)  task.description = bodyEl.value;
-
-        // Recalculer les tags depuis la description finale
-        if (bodyEl) {
-          const parsed = Editor.parse(bodyEl.value);
+        // Lire le champ riche unique : 1re ligne = titre, reste = description.
+        const rich = App.richField;
+        if (rich) {
+          const { title, body } = rich.getTitleAndBody();
+          task.title       = title;
+          task.description = body;
+          const parsed = Editor.parse(body);
           task.tags = [...new Set([...(task.tags || []), ...parsed.tags])];
         }
 
