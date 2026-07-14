@@ -21,7 +21,7 @@ const UI = (() => {
 
   // ── Login ─────────────────────────────────────────────────────────────────
 
-  function renderLogin(errorMessage = null) {
+  function renderLogin(errorMessage = null, prefill = null) {
     const app = document.getElementById('app');
     app.innerHTML = '';
     app.className = 'screen-login';
@@ -39,12 +39,12 @@ const UI = (() => {
         <div class="form-group">
           <label for="input-url">URL du proxy gtgWeb</label>
           <input type="url" id="input-url" placeholder="https://votresite.fr/proxy.php"
-                 autocomplete="off" spellcheck="false" />
+                 autocomplete="off" spellcheck="false" value="${prefill ? _escape(prefill.url || '') : ''}" />
           <span class="form-hint">L'URL de proxy.php sur votre hébergement.</span>
         </div>
         <div class="form-group">
           <label for="input-username">Identifiant</label>
-          <input type="text" id="input-username" autocomplete="username" />
+          <input type="text" id="input-username" autocomplete="username" value="${prefill ? _escape(prefill.username || '') : ''}" />
         </div>
         <div class="form-group">
           <label for="input-password">Mot de passe</label>
@@ -52,7 +52,7 @@ const UI = (() => {
           <span class="form-hint">Utilisez un mot de passe d'application Nextcloud.</span>
         </div>
         <div class="form-group form-group--inline">
-          <input type="checkbox" id="input-persist" />
+          <input type="checkbox" id="input-persist" ${prefill ? 'checked' : ''} />
           <label for="input-persist">Se souvenir de moi</label>
         </div>
         <button class="btn btn--primary" id="btn-connect">Se connecter →</button>

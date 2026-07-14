@@ -17,11 +17,16 @@ const Storage = (() => {
 
   // ── Credentials ───────────────────────────────────────────────────────────
 
+  // Le mot de passe ne touche JAMAIS le disque : il vit ici, en memoire vive,
+  // le temps de la session (perdu au rechargement, a retaper ou via coffre-fort).
+  let _sessionPassword = null;
+
   function saveCredentials(creds, persist = false) {
+    _sessionPassword = creds.password || null;
+    // On persiste tout SAUF le mot de passe.
     const data = JSON.stringify({
       url:             creds.url,
       username:        creds.username,
-      password:        creds.password,
       calendarName:    creds.calendarName || '',
       calendarSegment: creds.calendarSegment || '',
     });
@@ -35,14 +40,26 @@ const Storage = (() => {
   }
 
   function loadCredentials() {
+    let base = null;
     const sessionData = sessionStorage.getItem(KEY_CREDENTIALS);
-    if (sessionData) { try { return JSON.parse(sessionData); } catch (e) {} }
-    const localData = localStorage.getItem(KEY_CREDENTIALS);
-    if (localData)   { try { return JSON.parse(localData);   } catch (e) {} }
-    return null;
+    if (sessionData) { try { base = JSON.parse(sessionData); } catch (e) {} }
+    if (!base) {
+      const localData = localStorage.getItem(KEY_CREDENTIALS);
+      if (localData) { try { base = JSON.parse(localData); } catch (e) {} }
+    }
+    if (!base) return null;
+    // Injecter le mot de passe depuis la memoire (vide si nouvelle session).
+    base.password = _sessionPassword || '';
+    return base;
   }
 
   function hasCredentials() { return loadCredentials() !== null; }
+
+  // Vrai seulement si on a AUSSI le mot de passe en memoire (meme session).
+  function hasFullCredentials() {
+    const c = loadCredentials();
+    return c !== null && !!c.password;
+  }
 
   function clearCredentials() {
     sessionStorage.removeItem(KEY_CREDENTIALS);
@@ -110,7 +127,7 @@ const Storage = (() => {
   }
 
   return {
-    saveCredentials, loadCredentials, hasCredentials,
+    saveCredentials, loadCredentials, hasCredentials, hasFullCredentials,
     clearCredentials, isPersistent,
     saveConfig, loadConfig,
     saveTagConfig, loadTagConfig,

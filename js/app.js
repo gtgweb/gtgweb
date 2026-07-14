@@ -21,11 +21,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   UI.init(App.config, handleAction);
   UI.applyTheme(App.config.theme || 'auto');
 
-  if (Storage.hasCredentials()) {
+  if (Storage.hasFullCredentials()) {
+    // Session complete (mot de passe en memoire) : chargement direct.
     const creds = Storage.loadCredentials();
     App.calendarName = creds.calendarName || '';
     CalDAV.init(creds.url, creds.username, creds.password, creds.calendarSegment || '');
     await loadAndRender();
+  } else if (Storage.hasCredentials()) {
+    // Identifiants memorises SANS mot de passe (nouvelle session) :
+    // formulaire pre-rempli, l'utilisateur retape juste son mot de passe.
+    UI.renderLogin(null, Storage.loadCredentials());
   } else {
     UI.renderLogin();
   }
