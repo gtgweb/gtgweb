@@ -21,6 +21,17 @@ const UI = (() => {
 
   // ── Login ─────────────────────────────────────────────────────────────────
 
+  // Deduit l'URL du proxy depuis l'URL de la page : proxy.php est co-heberge
+  // avec gtgweb (racine du site + proxy.php). Evite de la demander.
+  function _deduceProxyUrl() {
+    const u = new URL(window.location.href);
+    let path = u.pathname;
+    const lastSeg = path.split('/').pop();
+    if (lastSeg.includes('.')) path = path.slice(0, path.length - lastSeg.length);
+    if (!path.endsWith('/')) path += '/';
+    return u.origin + path + 'proxy.php';
+  }
+
   function renderLogin(errorMessage = null, prefill = null) {
     const app = document.getElementById('app');
     app.innerHTML = '';
@@ -37,12 +48,6 @@ const UI = (() => {
         ${isCors ? `<div class="login-error">Connexion directe bloquée (CORS). Configurez l'URL du proxy PHP.</div>` : ''}
 
         <div class="form-group">
-          <label for="input-url">URL du proxy gtgWeb</label>
-          <input type="url" id="input-url" placeholder="https://votresite.fr/proxy.php"
-                 autocomplete="off" spellcheck="false" value="${prefill ? _escape(prefill.url || '') : ''}" />
-          <span class="form-hint">L'URL de proxy.php sur votre hébergement.</span>
-        </div>
-        <div class="form-group">
           <label for="input-username">Identifiant</label>
           <input type="text" id="input-username" autocomplete="username" value="${prefill ? _escape(prefill.username || '') : ''}" />
         </div>
@@ -51,20 +56,17 @@ const UI = (() => {
           <input type="password" id="input-password" autocomplete="current-password" />
           <span class="form-hint">Utilisez un mot de passe d'application Nextcloud.</span>
         </div>
-        <div class="form-group form-group--inline">
-          <input type="checkbox" id="input-persist" ${prefill ? 'checked' : ''} />
-          <label for="input-persist">Se souvenir de moi</label>
-        </div>
+        <p class="form-hint form-hint--center">Votre mot de passe n'est jamais enregistré. Vos identifiants sont pré-remplis au retour.</p>
         <button class="btn btn--primary" id="btn-connect">Se connecter →</button>
       </div>
     `;
 
     document.getElementById('btn-connect').addEventListener('click', () => {
       _onAction('login', {
-        url:      document.getElementById('input-url').value.trim(),
+        url:      _deduceProxyUrl(),
         username: document.getElementById('input-username').value.trim(),
         password: document.getElementById('input-password').value,
-        persist:  document.getElementById('input-persist').checked,
+        persist:  true, // on retient toujours user+calendrier (jamais le mdp)
       });
     });
 
@@ -95,10 +97,6 @@ const UI = (() => {
 
         <div class="calendar-list">${items || '<p class="form-hint">Aucun calendrier trouvé.</p>'}</div>
 
-        <div class="form-group form-group--inline">
-          <input type="checkbox" id="input-persist2" ${loginPayload.persist ? 'checked' : ''} />
-          <label for="input-persist2">Se souvenir de moi</label>
-        </div>
         <button class="btn btn--primary" id="btn-cal-select">Utiliser ce calendrier →</button>
         <button class="btn btn--ghost btn--small" id="btn-cal-back">← Retour</button>
       </div>
@@ -112,7 +110,7 @@ const UI = (() => {
         loginPayload,
         calendarName:    cal.name || detectedName || '',
         calendarSegment: cal.segment || '',
-        persist: document.getElementById('input-persist2').checked,
+        persist: true,
       });
     });
 
@@ -718,10 +716,22 @@ const UI = (() => {
       + String(d.getDate()).padStart(2, '0');
   }
 
+  function renderLoading(message = 'Chargement des tâches…') {
+    const app = document.getElementById('app');
+    app.className = 'screen-loading';
+    app.innerHTML = `
+      <div class="loading-box">
+        <div class="loading-spinner" aria-hidden="true"></div>
+        <p class="loading-text">${_escape(message)}</p>
+      </div>
+    `;
+  }
+
   return {
     init, renderLogin, renderCalendarPicker, renderSettings, closeSettings,
     renderMain, renderTaskList, renderTagList, renderEditor, closeEditor,
     setSyncState, toggleExpanded, toggleAll, applyTheme,
+    renderLoading,
   };
 
 })();

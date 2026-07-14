@@ -40,6 +40,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadAndRender() {
   UI.setSyncState('syncing');
+  UI.renderLoading();
   try {
     const items = await CalDAV.fetchAll();
     App.all     = Parser.parseTasks(items);
@@ -126,13 +127,23 @@ async function handleAction(action, payload) {
       const result = await CalDAV.testConnection();
       if (!result.ok) { UI.renderLogin(result.error); return; }
 
-      // Étape 2 : lister les calendriers
+      // Étape 2 : lister les calendriers VTODO
       try {
         const calendars = await CalDAV.listCalendars();
-        UI.renderCalendarPicker(calendars, result.calendarName, payload);
+        if (calendars.length === 1) {
+          // Un seul calendrier : pas de choix a faire, on finalise direct.
+          const only = calendars[0];
+          await _finalizeLogin(payload, only.name || result.calendarName || '', only.segment || '', true);
+        } else if (calendars.length === 0) {
+          // Aucun calendrier liste : utiliser le displayname detecte.
+          await _finalizeLogin(payload, result.calendarName || '', '', true);
+        } else {
+          // Plusieurs calendriers : laisser l'utilisateur choisir.
+          UI.renderCalendarPicker(calendars, result.calendarName, payload);
+        }
       } catch (e) {
         // Pas de liste disponible — utiliser le displayname détecté
-        await _finalizeLogin(payload, result.calendarName || '', payload.persist);
+        await _finalizeLogin(payload, result.calendarName || '', '', true);
       }
       break;
     }
