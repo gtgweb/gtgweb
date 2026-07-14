@@ -388,7 +388,7 @@ async function _saveTask(task) {
       await CalDAV.create(task.uid, ical);
       result = { ok: true, conflict: false };
     } else {
-      result = await CalDAV.update(task.uid, ical, task.etag);
+      result = await CalDAV.update(task.uid, ical, task.etag, task.href);
     }
 
     if (result.conflict) {

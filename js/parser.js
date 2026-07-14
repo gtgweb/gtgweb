@@ -20,7 +20,7 @@ const Parser = (() => {
    * @param {string} etag  ETag HTTP de la ressource
    * @returns {Object|null} Objet Task ou null si invalide
    */
-  function parseTask(ical, etag = '') {
+  function parseTask(ical, etag = '', href = '') {
     try {
       const lines = unfold(ical);
 
@@ -167,6 +167,7 @@ const Parser = (() => {
         children,
         parent,
         etag,
+        href,            // nom de fichier .ics reel (peut differer de uid.ics)
         raw: ical,       // VTODO brut complet — préservation champs inconnus
       };
 
@@ -183,7 +184,7 @@ const Parser = (() => {
    */
   function parseTasks(items) {
     return items
-      .map(item => parseTask(item.ical, item.etag))
+      .map(item => parseTask(item.ical, item.etag, item.href))
       .filter(task => task !== null);
   }
 

@@ -167,13 +167,13 @@ const CalDAV = (() => {
   }
 
   async function get(uid) {
-    const response = await _request('GET', uid + '.ics');
+    const response = await _request('GET', _fileFor(href || uid));
     if (!response.ok) throw new Error(`get(${uid}) échoué : HTTP ${response.status}`);
     return { uid, etag: response.headers.get('ETag') || '', ical: await response.text() };
   }
 
   async function create(uid, ical) {
-    const response = await _request('PUT', uid + '.ics', {
+    const response = await _request('PUT', _fileFor(href || uid), {
       headers: { 'Content-Type': 'text/calendar; charset=utf-8' },
       body: ical,
     });
@@ -181,13 +181,21 @@ const CalDAV = (() => {
     return uid;
   }
 
-  async function update(uid, ical, etag = '') {
+  // Nom de fichier .ics : href memorise si present, sinon uid.ics.
+  function _fileFor(uidOrHref) {
+    if (uidOrHref && uidOrHref.includes('.ics')) {
+      return uidOrHref.replace(/\/+$/, '').split('/').pop();
+    }
+    return uidOrHref + '.ics';
+  }
+
+  async function update(uid, ical, etag = '', href = '') {
     const headers = { 'Content-Type': 'text/calendar; charset=utf-8' };
 
     // GET frais pour récupérer l'ETag courant côté serveur.
     // Nécessaire car GTG desktop peut avoir modifié la tâche entre-temps.
     try {
-      const getResp = await _request('GET', uid + '.ics');
+      const getResp = await _request('GET', _fileFor(href || uid));
       if (getResp.ok) {
         const freshEtag = getResp.headers.get('ETag');
         if (freshEtag) headers['If-Match'] = freshEtag;
@@ -197,7 +205,7 @@ const CalDAV = (() => {
       console.warn('gtgWeb CalDAV : GET frais échoué, PUT sans If-Match', e);
     }
 
-    const response = await _request('PUT', uid + '.ics', { headers, body: ical });
+    const response = await _request('PUT', _fileFor(href || uid), { headers, body: ical });
     if (response.status === 412) return { ok: false, conflict: true };
     if (!response.ok) throw new Error(`update(${uid}) échoué : HTTP ${response.status}`);
     return { ok: true, conflict: false };
@@ -208,7 +216,7 @@ const CalDAV = (() => {
 
     // GET frais pour récupérer l'ETag courant — même logique que update()
     try {
-      const getResp = await _request('GET', uid + '.ics');
+      const getResp = await _request('GET', _fileFor(href || uid));
       if (getResp.ok) {
         const freshEtag = getResp.headers.get('ETag');
         if (freshEtag) headers['If-Match'] = freshEtag;
@@ -243,6 +251,13 @@ const CalDAV = (() => {
         etags.push(em[1].replace(/"/g, ''));
       }
 
+      // Href (nom de fichier .ics) dans l'ordre. Le nom de fichier n'est PAS
+      // toujours l'uid : GTG desktop le nomme differemment.
+      const hrefRe = /<[^:>]*:?href[^>]*>([^<]+\.ics)<\/[^:>]*:?href>/gi;
+      const hrefs = [];
+      let hm;
+      while ((hm = hrefRe.exec(xml)) !== null) { hrefs.push(hm[1].trim()); }
+
       let m;
       let idx = 0;
       while ((m = calDataRe.exec(xml)) !== null) {
@@ -262,6 +277,7 @@ const CalDAV = (() => {
         results.push({
           uid:  uidMatch[1].trim(),
           etag: etags[idx] || '',
+          href: hrefs[idx] || '',
           ical,
         });
         idx++;
