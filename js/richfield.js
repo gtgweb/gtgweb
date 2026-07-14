@@ -223,7 +223,13 @@ const RichField = (function () {
         sel.removeAllRanges(); sel.addRange(range);
       } catch (e) { /* noop */ }
     }
+    // Garde composition : sur mobile, le clavier predictif/IME "compose" les
+    // mots ; re-rendre le DOM pendant ce temps casse la synchro et duplique les
+    // lettres. On bloque process() pendant la composition, on relance apres.
+    let composing = false;
+
     function process() {
+      if (composing) return; // ne jamais re-rendre en pleine composition
       const pos = currentPos();
       const lines = getLines(el);
       renderAll(lines);
@@ -242,13 +248,21 @@ const RichField = (function () {
         if (onChange) onChange(lines);
         return;
       }
-      if (e.key === ' ') { setTimeout(process, 0); }
+      if (e.key === ' ' && !composing) { setTimeout(process, 0); }
     });
     el.addEventListener('input', () => {
       clearTimeout(timer);
       timer = setTimeout(process, PROCESSING_DELAY);
     });
     el.addEventListener('blur', process);
+
+    // Composition clavier (mobile/IME) : suspendre le rendu pendant, reprendre apres.
+    el.addEventListener('compositionstart', () => { composing = true; clearTimeout(timer); });
+    el.addEventListener('compositionend', () => {
+      composing = false;
+      clearTimeout(timer);
+      timer = setTimeout(process, PROCESSING_DELAY);
+    });
 
     return {
       // API : lire le texte pur (toutes lignes)
