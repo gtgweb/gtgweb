@@ -174,8 +174,9 @@ const Builder = (() => {
    */
   function _appendDates(lines, task) {
     if (task.fuzzy) {
-      lines.push(`X-GTG-FUZZY:${task.fuzzy}`);
-      lines.push('DUE;VALUE=DATE:20991231');
+      // Convention GTG : parametre GTGFUZZY sur la ligne DUE (interop desktop).
+      // Sentinelle 2099 conservee comme date reelle lisible (GTG lit le parametre).
+      lines.push(`DUE;VALUE=DATE;GTGFUZZY=${task.fuzzy}:20991231`);
     } else if (task.due) {
       lines.push(`DUE;VALUE=DATE:${dateToIcal(task.due)}`);
     }

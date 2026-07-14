@@ -68,9 +68,15 @@ const Parser = (() => {
           categories = line.substring(11).trim();
           continue;
         }
-        // Date d'échéance
+        // Date d'échéance (avec detection du parametre fuzzy GTG)
         if (line.startsWith('DUE')) {
-          due = parseDate(line);
+          const fm = line.match(/GTGFUZZY=([^:;]+)/i);
+          if (fm) {
+            // Convention GTG : le fuzzy prime, la date reelle a cote est ignoree.
+            fuzzy = fm[1].trim();
+          } else {
+            due = parseDate(line);
+          }
           continue;
         }
         // Date de début
