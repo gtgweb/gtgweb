@@ -497,7 +497,6 @@ const UI = (() => {
         now:     { label: 'Maintenant', cls: 'date--now'     },
         soon:    { label: 'Bientôt',    cls: 'date--soon'    },
         someday: { label: 'Un jour',    cls: 'date--someday' },
-        later:   { label: 'Plus tard',  cls: 'date--later'   },
       };
       const f = labels[task.fuzzy];
       if (f) return `<span class="${f.cls}">${f.label}</span>`;
@@ -522,8 +521,8 @@ const UI = (() => {
     if (!panel) return;
     panel.classList.remove('hidden');
 
-    const fuzzyLabels = ['now', 'soon', 'someday', 'later'];
-    const fuzzyNames  = { now: 'Maintenant', soon: 'Bientôt', someday: 'Un jour', later: 'Plus tard' };
+    const fuzzyLabels = ['now', 'soon', 'someday'];
+    const fuzzyNames  = { now: 'Maintenant', soon: 'Bientôt', someday: 'Un jour' };
     const isNew       = !task.raw;
 
     panel.innerHTML = `
