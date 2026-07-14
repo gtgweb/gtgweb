@@ -57,6 +57,8 @@ const RichField = (function () {
     let buf = ''; let hasInline = false;
     const flush = () => { if (hasInline) { lines.push(...buf.split('\n')); buf = ''; hasInline = false; } };
     for (const ch of el.childNodes) {
+      // Ignorer la zone des sous-taches (elle n'est pas du texte editable).
+      if (ch.nodeType === Node.ELEMENT_NODE && ch.classList && ch.classList.contains('rf-subtasks')) continue;
       if (ch.nodeName === 'DIV') { flush(); lines.push(...divToLines(ch)); }
       else if (ch.nodeName === 'BR') { buf += '\n'; hasInline = true; }
       else if (ch.nodeType === Node.TEXT_NODE) { buf += ch.textContent; hasInline = true; }
@@ -192,6 +194,22 @@ const RichField = (function () {
     return `<div class="${isFirst ? 'rf-title' : ''}">${html}</div>`;
   }
 
+  // Rendu de la zone des sous-taches (groupees en bas, non editables).
+  function renderSubtasksHtml(subtasks) {
+    if (!subtasks || !subtasks.length) return '';
+    let html = '<div class="rf-subtasks" contenteditable="false">';
+    for (const sub of subtasks) {
+      const done = sub.done ? ' rf-subtask--done' : '';
+      const checked = sub.done ? 'checked' : '';
+      html += `<div class="rf-subtask${done}" data-uid="${esc(sub.uid)}">`
+        + `<input type="checkbox" class="rf-subtask-check" ${checked} disabled>`
+        + `<span class="rf-subtask-title" data-uid="${esc(sub.uid)}">${esc(sub.title)}</span>`
+        + `</div>`;
+    }
+    html += '</div>';
+    return html;
+  }
+
   function splitAt(lines, line, col) {
     const l = lines[line] ?? '';
     return [...lines.slice(0, line), l.slice(0, col), l.slice(col), ...lines.slice(line + 1)];
@@ -211,8 +229,10 @@ const RichField = (function () {
       if (!el.contains(r.endContainer)) return null;
       return caretPosFromPoint(el, r.endContainer, r.endOffset);
     }
+    let _subtasks = []; // sous-taches courantes (affichage seul, etape A)
     function renderAll(lines) {
-      el.innerHTML = lines.map((l, i) => renderLine(l, i === 0, colorFn)).join('');
+      el.innerHTML = lines.map((l, i) => renderLine(l, i === 0, colorFn)).join('')
+        + renderSubtasksHtml(_subtasks);
     }
     function placeCaret(line, col) {
       const { node, offset } = resolveLineCol(el, line, col);
@@ -276,6 +296,13 @@ const RichField = (function () {
       setTitleAndBody(title, body) {
         const lines = [title || '', ...String(body || '').split('\n')];
         // si body vide, éviter une 2e ligne vide parasite
+        if ((body || '') === '') lines.length = 1;
+        renderAll(lines.length ? lines : ['']);
+      },
+      // API : initialiser depuis titre + corps + sous-taches (etape A, affichage).
+      setContent(title, body, subtasks) {
+        _subtasks = subtasks || [];
+        const lines = [title || '', ...String(body || '').split('\n')];
         if ((body || '') === '') lines.length = 1;
         renderAll(lines.length ? lines : ['']);
       },

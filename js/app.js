@@ -16,6 +16,10 @@ const App = {
   calendarName: '',   // displayname du calendrier actif (ex: 'gtg')
 };
 
+// Exposer App aux autres modules (ui.js lit App.index, App.richField).
+// app.js est charge en dernier, les autres modules accedent via window.App.
+window.App = App;
+
 document.addEventListener('DOMContentLoaded', async () => {
   App.config = Storage.loadConfig();
   UI.init(App.config, handleAction);

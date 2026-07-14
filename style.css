@@ -945,3 +945,27 @@ html.theme-dark {
 }
 .loading-text { color: var(--text-muted, #888); font-size: 15px; }
 @keyframes gtgweb-spin { to { transform: rotate(360deg); } }
+
+/* ── Sous-taches dans l'editeur (etape A : affichage) ── */
+.rf-subtasks {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border, #e0e0e0);
+}
+.rf-subtask {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 0;
+}
+.rf-subtask-check {
+  width: 16px; height: 16px; cursor: default;
+  accent-color: var(--accent, #3584e4);
+}
+.rf-subtask-title {
+  color: var(--accent, #3584e4);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.rf-subtask--done .rf-subtask-title {
+  color: var(--text-muted, #999);
+  text-decoration: line-through;
+}

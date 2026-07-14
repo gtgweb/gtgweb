@@ -593,7 +593,13 @@ const UI = (() => {
     const _bodyParts = [];
     if (_missing.length) _bodyParts.push(_missing.map(t => '@' + t).join(' '));
     if (_desc) _bodyParts.push(_desc);
-    rich.setTitleAndBody(task.title || '', _bodyParts.join('\n'));
+    // Sous-taches : recuperer titre + etat depuis l'index (relations RELATED-TO).
+    const _subs = (task.children || []).map(uid => {
+      const child = (window.App && window.App.index) ? window.App.index.get(uid) : null;
+      if (!child) return null;
+      return { uid, title: child.title || '(sans titre)', done: child.status === 'COMPLETED' };
+    }).filter(Boolean);
+    rich.setContent(task.title || '', _bodyParts.join('\n'), _subs);
     if (window.App) window.App.richField = rich;
 
     // Commence le
