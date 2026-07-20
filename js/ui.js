@@ -252,6 +252,11 @@ const UI = (() => {
     const app = document.getElementById('app');
     app.className = 'screen-main';
 
+    // Preserver le defilement de la sidebar : renderMain reconstruit tout le DOM
+    // (innerHTML), donc #tag-list est recree et son scrollTop repartirait a 0 a
+    // chaque filtrage par tag ou changement de vue. On le capture avant.
+    const _prevTagScroll = (document.getElementById('tag-list') || {}).scrollTop || 0;
+
     app.innerHTML = `
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
@@ -300,6 +305,8 @@ const UI = (() => {
     `;
 
     renderTagList(tagList, untagged);
+    const _tagListEl = document.getElementById('tag-list');
+    if (_tagListEl) _tagListEl.scrollTop = _prevTagScroll;
     renderTaskList(roots, index);
 
     document.getElementById('view-tabs').addEventListener('click', e => {

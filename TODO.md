@@ -64,14 +64,17 @@ historiques `gtgweb-<timestamp>-<aléa>@gtgweb` cassent l'import (GTG #1289).
   multi-calendrier (prévu v2).
 - **Mode debug/verbose** : ajouter un mode qui affiche les URL cibles, codes HTTP et
   en-têtes, pour diagnostiquer sans sonde manuelle côté serveur.
-- **Éditeur s'ouvre au démarrage** : `App.pendingTask` non null au chargement,
-  une tâche vide se crée sans action utilisateur (app.js).
+- ~~**Éditeur s'ouvre au démarrage**~~ : OBSOLÈTE (vérif 2026-07-20). Aucun chemin n'ouvre
+  l'éditeur au chargement : `renderEditor` et `pendingTask` ne sont touchés que par
+  `openTask` / `newTask`, déclenchés uniquement au clic. Non reproductible.
 
 ### Priorité moyenne
 
 - **`@DAV_gtg` visible dans GTG desktop** (tag technique de sync) : en réflexion,
   piste : ne l'écrire que dans CATEGORIES, jamais dans la DESCRIPTION.
-- **Sidebar remonte en haut au filtrage par tag** : sauvegarder puis restaurer `scrollTop`.
+- ~~**Sidebar remonte en haut au filtrage par tag**~~ : RÉSOLU 2026-07-20. `renderMain`
+  capture le `scrollTop` de `#tag-list` avant reconstruction du DOM et le restaure après
+  `renderTagList` (`ui.js`).
 - ~~**Mode sombre : le menu des tags (sidebar) reste clair**~~ : RÉSOLU 2026-07-20.
   `html.theme-dark` (thème forcé via les Paramètres) ne redéfinissait pas `--sidebar-bg`
   ni `--bg-tertiary`, contrairement au `@media (prefers-color-scheme: dark)`. Les deux
@@ -100,7 +103,7 @@ historiques `gtgweb-<timestamp>-<aléa>@gtgweb` cassent l'import (GTG #1289).
 - [x] ~~Corriger la tuyauterie du sélecteur de calendrier (piloter l'URL cible)~~ (constaté OK 2026-07-20, pilotage par `calendarSegment`)
 - [ ] Test de connexion + capacité d'écriture VTODO avant validation (repli racine inclus) — filtrage VTODO déjà fait
 - [ ] Mode debug/verbose
-- [ ] Fix éditeur au démarrage
+- [x] ~~Fix éditeur au démarrage~~ (obsolète, vérifié 2026-07-20 : non reproductible)
 - [ ] Fix scroll sidebar
 - [ ] Notifications utilisateur (orphelines, erreurs réseau)
 - [x] ~~Fournir les icônes (192 et 512) pour la PWA~~ (fait 2026-07-20, dossier `img/` versionné)
