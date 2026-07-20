@@ -1,1 +1,6 @@
+# Config proxy (contient l'URL CalDAV, jamais versionnée)
 proxy-config.php
+
+# Backups et fichiers temporaires d'éditeur
+*~
+*.swp
