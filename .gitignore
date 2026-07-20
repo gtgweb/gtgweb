@@ -4,3 +4,6 @@ proxy-config.php
 # Backups et fichiers temporaires d'éditeur
 *~
 *.swp
+
+# Réglages locaux d'outils (Claude Code, etc.), propres à la machine
+.claude/
