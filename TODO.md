@@ -110,7 +110,7 @@ historiques `gtgweb-<timestamp>-<aléa>@gtgweb` cassent l'import (GTG #1289).
 - [ ] Test de connexion + capacité d'écriture VTODO avant validation (repli racine inclus) — filtrage VTODO déjà fait
 - [ ] Mode debug/verbose
 - [x] ~~Fix éditeur au démarrage~~ (obsolète, vérifié 2026-07-20 : non reproductible)
-- [ ] Fix scroll sidebar
+- [x] ~~Fix scroll sidebar~~ (fait 2026-07-20, commit d5a694f)
 - [x] ~~Notifications utilisateur~~ (fait 2026-07-20 : chargement/sauvegarde résilients, tâches illisibles signalées)
 - [x] ~~Fournir les icônes (192 et 512) pour la PWA~~ (fait 2026-07-20, dossier `img/` versionné)
 - [ ] Bouton ↺ rechargement dans la toolbar
@@ -122,11 +122,37 @@ historiques `gtgweb-<timestamp>-<aléa>@gtgweb` cassent l'import (GTG #1289).
 - [ ] Dédupliquer la regex `@tag` (présente dans 5 fichiers) et `unfold`
       (implémentations divergentes entre parser.js et builder.js)
 - [ ] Durcir `proxy.php` : borner `$path` (neutraliser `../`), éviter `Access-Control-Allow-Origin: *` par défaut
-- [ ] Hygiène dépôt : ranger ou ignorer les `porteur-*.py`, `files.zip`, `manifest.json~` ; élargir `.gitignore`
+- [x] ~~Hygiène dépôt : porteurs / `files.zip` / `manifest.json~` / `.gitignore`~~ (fait 2026-07-20, commit ad2fef6)
 - [ ] Retirer `CalDAV.get()` (code mort) ou lui donner un usage
 - [ ] Publier la démo (mode démo sans configuration) : ASAP
 - [ ] Documenter l'installation dans README.md ; README bilingue FR/EN
 - [ ] Release v1.0 taggée sur GitHub
+
+---
+
+## 🧭 Pistes robustesse & mobile (inspirées de mindwtr — à arbitrer, rien de tranché)
+
+Audit du 2026-07-20 de https://github.com/dongdongbh/mindwtr (GTD local-first, publié sur
+F-Droid). Stack opposée (TS/Tauri/RN/SQLite) : on n'emprunte que des idées ponctuelles,
+compatibles Vanilla JS, sans dénaturer le projet.
+
+- [ ] **Kit de robustesse réseau** (le plus aligné mobile) : `fetchWithTimeout`
+      (AbortController — un `fetch` sans timeout pend indéfiniment en 4G/tunnel, trou réel
+      dans `caldav.js`), `withRetry` (backoff + jitter), classification des erreurs
+      (401/403/404 jamais retenter ; 429/5xx/erreurs réseau oui), réponse CalDAV tronquée
+      traitée comme transitoire, file async sérialisée. ~150 lignes pures.
+- [ ] **Durcir le service worker** : navigation network-first + fallback shell, ne JAMAIS
+      cacher du HTML sous une URL de script/style (évite « app cassée après redéploiement »),
+      CalDAV toujours réseau, cache limité aux assets GET same-origin.
+- [ ] **File d'écriture hors-ligne + fast-check** (chantier moyen) : rejouer les PUT CalDAV
+      échoués au retour du réseau (via `withRetry`), en s'appuyant sur les ETag ; empreinte de
+      contenu (hors champs volatils) pour sauter les syncs no-op. Le vrai saut « offline-first ».
+- [ ] Patron `resolveTaskNavigationView` (router une tâche vers la bonne vue) : utile pour le
+      chantier « une tâche = une URL ».
+
+Garde-fou : NE PAS importer le modèle de sync de mindwtr (snapshot JSON + tombstones + merge
+maison). gtgWeb parle CalDAV — serveur intelligent, VTODO identifié par href, concurrence par
+ETag/If-Match (déjà en place). Pas de ports/adaptateurs multi-plateforme (cible mono-navigateur).
 
 ---
 
