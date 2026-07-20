@@ -15,6 +15,8 @@ Navigateur → proxy.php → Nextcloud CalDAV
 
 Le proxy est un fichier PHP sur votre hébergement. Il reçoit les requêtes de gtgWeb, les retransmet à votre serveur CalDAV, et ajoute les headers CORS nécessaires. Il ne stocke aucune donnée.
 
+Une seule instance sert **tous les comptes d'un même serveur Nextcloud** : le proxy ne connaît que l'adresse du serveur et déduit le chemin calendrier de chaque utilisateur à partir de ses identifiants (découverte du principal, RFC 5397). Vous n'avez donc plus à configurer d'URL par utilisateur.
+
 ---
 
 ## Configuration
@@ -25,8 +27,8 @@ Copiez `proxy-config.example.php` et renommez-le `proxy-config.php`.
 
 ```php
 <?php
-// URL de votre calendrier CalDAV (avec slash final)
-$CALDAV_URL = 'https://nuage.example.org/remote.php/dav/calendars/USER/CALENDRIER/';
+// Racine de votre serveur Nextcloud (sans chemin, sans slash final)
+$CALDAV_SERVER = 'https://nuage.example.org';
 
 // Origine autorisée — mettez l'URL exacte de votre gtgWeb en production
 // Exemple : 'https://gtg.votredomaine.fr'
@@ -34,15 +36,13 @@ $CALDAV_URL = 'https://nuage.example.org/remote.php/dav/calendars/USER/CALENDRIE
 $ALLOWED_ORIGIN = '*';
 ```
 
-### 2. Trouver votre URL CalDAV
+Le proxy construit lui-même `/remote.php/dav/calendars/COMPTE/` pour le compte connecté. Un utilisateur peut s'authentifier avec son adresse mail : la découverte du principal résout le nom de compte interne exigé par le chemin DAV.
 
-→ Consultez le [guide URLs CalDAV](caldav-urls.md)
-
-### 3. Uploader proxy.php et proxy-config.php
+### 2. Uploader proxy.php et proxy-config.php
 
 Les deux fichiers doivent être dans le même dossier sur votre hébergement.
 
-### 4. Utiliser l'URL du proxy dans gtgWeb
+### 3. Utiliser l'URL du proxy dans gtgWeb
 
 Sur l'écran de connexion, entrez l'URL du proxy (pas l'URL CalDAV directe) :
 
@@ -90,13 +90,20 @@ curl -v -X OPTIONS https://votredomaine.fr/proxy.php \
 # HTTP/1.1 204 No Content
 # Access-Control-Allow-Origin: *
 
-# Test connexion CalDAV
+# Test connexion CalDAV (proxy transparent → racine calendriers du compte)
 curl -v -X PROPFIND https://votredomaine.fr/proxy.php \
   -H "Authorization: Basic $(echo -n 'user:motdepasse' | base64)" \
   -H "Depth: 0"
 
 # Résultat attendu :
 # HTTP/1.1 207 Multi-Status
+
+# Liste des calendriers du compte (le proxy déduit le chemin des identifiants)
+curl -s -u 'user:motdepasse' \
+  'https://votredomaine.fr/proxy.php?action=calendars'
+
+# Chaque compte du même serveur voit ses propres calendriers, sans config dédiée.
+# Mauvais mot de passe → HTTP 401 propagé.
 ```
 
 ---

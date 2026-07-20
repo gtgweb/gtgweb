@@ -69,13 +69,13 @@ Vous trouverez l'URL dans l'interface d'administration Baikal → Calendriers.
 
 ## Avec le proxy gtgWeb
 
-Quelle que soit votre URL CalDAV, si vous utilisez le proxy PHP de gtgWeb, entrez sur l'écran de connexion :
+Si vous utilisez le proxy PHP de gtgWeb, vous n'avez pas besoin de connaître votre URL CalDAV : entrez simplement sur l'écran de connexion l'URL du proxy, puis vos identifiants Nextcloud.
 
 ```
 https://VOTRE-GTGWEB/proxy.php
 ```
 
-L'URL CalDAV réelle est configurée dans `proxy-config.php` côté serveur — elle n'est jamais exposée dans le navigateur.
+Le proxy ne connaît que la racine du serveur Nextcloud (`$CALDAV_SERVER` dans `proxy-config.php`). Il déduit votre chemin calendrier de vos identifiants (découverte du principal), puis gtgWeb vous laisse choisir la liste de tâches parmi vos calendriers. Une seule instance sert ainsi tous les comptes du serveur, et aucune URL par utilisateur n'est écrite côté serveur.
 
 ---
 
