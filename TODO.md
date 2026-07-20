@@ -167,6 +167,17 @@ ETag/If-Match (déjà en place). Pas de ports/adaptateurs multi-plateforme (cibl
 - Greffon GTG desktop (Python) : sync couleurs et icônes des tags
 - Mode hors-ligne complet (stratégie de cache à spécifier)
 - Chiffrement côté client optionnel
+- **Déverrouillage par code PIN** (décidé 2026-07-20) — lever la friction « retaper le mot de
+  passe à chaque session » SANS céder sur la sécurité. Le mot de passe est chiffré (WebCrypto,
+  PBKDF2 lent) par une clé dérivée d'un PIN court ; seule la version **chiffrée** va dans
+  `localStorage`. Garanties : mot de passe **jamais en clair** sur disque, PIN **jamais stocké**.
+  Compromis assumé : disque + PIN deviné = déchiffrable (le KDF lent + un PIN correct le rendent
+  coûteux). Pattern des apps mobiles (PIN/biométrie), aligné sur le cap mobile.
+  Rappel du design actuel : le mot de passe vit seulement en mémoire de session (`storage.js`,
+  `_sessionPassword`), perdu au rechargement — d'où la retape.
+  Alternatives écartées : (A) déléguer au gestionnaire du navigateur (vrai `<form>` +
+  `autocomplete`, petit fix possible en attendant, gtgWeb ne stocke toujours rien) ;
+  (B) API Credential Management (bonus, support inégal selon navigateur).
 
 ---
 
