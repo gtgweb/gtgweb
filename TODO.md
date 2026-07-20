@@ -119,8 +119,10 @@ historiques `gtgweb-<timestamp>-<aléa>@gtgweb` cassent l'import (GTG #1289).
 - [ ] Round-trip complet : créer dans gtgWeb, modifier dans GTG, revérifier dans gtgWeb
 - [x] ~~Socle de tests round-trip parser↔builder (pur JS)~~ (fait 2026-07-20, 11 cas,
       `tests/round-trip.html` + `.js`, commit 69f23bb) — base à étendre pour « Fixtures de conformité »
-- [ ] Dédupliquer la regex `@tag` (présente dans 5 fichiers) et `unfold`
-      (implémentations divergentes entre parser.js et builder.js)
+- [ ] Dédupliquer la regex `@tag` : 4 usages fusionnables (`editor.js:31` et `:190`,
+      `ui.js:596`, `richfield.js:19`) ; le motif « tags de tête » `builder.js:29` est distinct,
+      à ne pas fusionner. **À faire avec des tests d'abord** — ces regex ne sont couvertes par
+      aucun test (reporté 2026-07-20 par prudence). Idem `unfold` (parser.js vs builder.js).
 - [ ] Durcir `proxy.php` : borner `$path` (neutraliser `../`), éviter `Access-Control-Allow-Origin: *` par défaut
 - [x] ~~Hygiène dépôt : porteurs / `files.zip` / `manifest.json~` / `.gitignore`~~ (fait 2026-07-20, commit ad2fef6)
 - [ ] Retirer `CalDAV.get()` (code mort) ou lui donner un usage
@@ -141,9 +143,9 @@ compatibles Vanilla JS, sans dénaturer le projet.
       dans `caldav.js`), `withRetry` (backoff + jitter), classification des erreurs
       (401/403/404 jamais retenter ; 429/5xx/erreurs réseau oui), réponse CalDAV tronquée
       traitée comme transitoire, file async sérialisée. ~150 lignes pures.
-- [ ] **Durcir le service worker** : navigation network-first + fallback shell, ne JAMAIS
-      cacher du HTML sous une URL de script/style (évite « app cassée après redéploiement »),
-      CalDAV toujours réseau, cache limité aux assets GET same-origin.
+- [x] ~~**Durcir le service worker**~~ (fait 2026-07-20) : `_isCacheable` (GET same-origin,
+      200 basic, pas de HTML sous URL d'asset), CalDAV toujours réseau, `CACHE_NAME` v2.
+      **Bug réel corrigé au passage** : `richfield.js` manquait du précache (éditeur cassé hors-ligne).
 - [ ] **File d'écriture hors-ligne + fast-check** (chantier moyen) : rejouer les PUT CalDAV
       échoués au retour du réseau (via `withRetry`), en s'appuyant sur les ETag ; empreinte de
       contenu (hors champs volatils) pour sauter les syncs no-op. Le vrai saut « offline-first ».
