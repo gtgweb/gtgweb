@@ -699,8 +699,10 @@ const UI = (() => {
     const el = document.getElementById('sync-indicator');
     if (!el) return;
     el.className = `sync-indicator sync-indicator--${state}`;
-    el.textContent = { syncing: '↻ Sync…', done: '', error: '⚠ ' + message }[state] || '';
-    if (state === 'done') setTimeout(() => { el.textContent = ''; }, 2000);
+    el.textContent = { syncing: '↻ Sync…', done: '', warning: '⚠ ' + message, error: '⚠ ' + message }[state] || '';
+    // done et warning s'effacent seuls ; warning reste un peu plus longtemps.
+    if (state === 'done')    setTimeout(() => { el.textContent = ''; }, 2000);
+    if (state === 'warning') setTimeout(() => { el.textContent = ''; }, 6000);
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -739,11 +741,27 @@ const UI = (() => {
     `;
   }
 
+  // Ecran d'echec de chargement : sur screen-loading il n'y a pas de
+  // sync-indicator, donc setSyncState('error') n'afficherait rien. On rend un
+  // etat explicite avec bouton Reessayer (cas frequent en mobile).
+  function renderLoadError(message = 'Impossible de charger les tâches.') {
+    const app = document.getElementById('app');
+    app.className = 'screen-loading';
+    app.innerHTML = `
+      <div class="loading-box">
+        <p class="loading-text">⚠ ${_escape(message)}</p>
+        <button class="btn btn--primary" id="btn-retry-load">Réessayer</button>
+      </div>
+    `;
+    const btn = document.getElementById('btn-retry-load');
+    if (btn) btn.addEventListener('click', () => _onAction('retryLoad', {}));
+  }
+
   return {
     init, renderLogin, renderCalendarPicker, renderSettings, closeSettings,
     renderMain, renderTaskList, renderTagList, renderEditor, closeEditor,
     setSyncState, toggleExpanded, toggleAll, applyTheme,
-    renderLoading,
+    renderLoading, renderLoadError,
   };
 
 })();

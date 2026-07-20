@@ -54,10 +54,19 @@ async function loadAndRender() {
       console.warn(`gtgWeb : ${orphans.length} tâche(s) orpheline(s)`);
     }
     renderCurrentView();
-    UI.setSyncState('done');
+    // Signaler discretement les taches illisibles ecartees au parsing (sans
+    // trace jusqu'ici) : de la donnee invisible est pire qu'une erreur visible.
+    const ignored = items.length - App.all.length;
+    if (ignored > 0) {
+      UI.setSyncState('warning', `${ignored} tâche(s) illisible(s) ignorée(s).`);
+    } else {
+      UI.setSyncState('done');
+    }
   } catch (e) {
     console.error('gtgWeb : erreur chargement', e);
-    UI.setSyncState('error', 'Impossible de charger les tâches.');
+    // Ecran d'erreur dedie avec bouton Reessayer : setSyncState ne montrerait
+    // rien ici (pas de sync-indicator sur l'ecran de chargement).
+    UI.renderLoadError('Impossible de charger les tâches. Vérifiez votre connexion, puis réessayez.');
   }
 }
 
@@ -194,6 +203,12 @@ async function handleAction(action, payload) {
       break;
     }
 
+    // ── Rechargement (apres echec, ex. reseau mobile instable) ──────────────
+    case 'retryLoad': {
+      await loadAndRender();
+      break;
+    }
+
     // ── Navigation ──────────────────────────────────────────────────────────
     case 'changeView': {
       App.config.activeView = payload.view;
@@ -300,7 +315,12 @@ async function handleAction(action, payload) {
           break;
         }
 
-        await _saveTask(task);
+        const ok = await _saveTask(task);
+        if (ok === false) {
+          // Echec de sauvegarde (ex. reseau mobile coupe) : on GARDE l'editeur
+          // ouvert et la saisie intacte pour reessayer. Message deja affiche.
+          break;
+        }
         App.pendingTask = null;
         await loadAndRender();
       }
@@ -399,14 +419,16 @@ async function _saveTask(task) {
       console.warn(`gtgWeb : conflit sur ${task.uid}`);
       UI.setSyncState('error', 'Conflit — rechargement…');
       await loadAndRender();
-      return;
+      return true;   // conflit géré (version serveur rechargée), pas un échec à re-signaler
     }
 
     App.index.set(task.uid, { ...task, raw: ical, sequence: (task.sequence || 0) + 1 });
     UI.setSyncState('done');
+    return true;
 
   } catch (e) {
     console.error('gtgWeb : erreur sauvegarde', e);
-    UI.setSyncState('error', 'Erreur de sauvegarde.');
+    UI.setSyncState('error', 'Erreur de sauvegarde. Vos modifications ne sont pas perdues, réessayez.');
+    return false;
   }
 }

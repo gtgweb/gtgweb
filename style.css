@@ -647,6 +647,7 @@ a { text-decoration: none; color: inherit; }
 
 .sync-indicator:not(:empty)      { opacity: 1; }
 .sync-indicator--syncing         { color: var(--accent); }
+.sync-indicator--warning         { color: var(--orange); background: color-mix(in srgb, var(--orange) 12%, var(--bg-tertiary)); }
 .sync-indicator--error           { color: var(--red); background: color-mix(in srgb, var(--red) 10%, var(--bg-tertiary)); }
 
 /* ── Scrollbars ────────────────────────────────────────────────────────────── */

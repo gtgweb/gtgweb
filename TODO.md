@@ -70,8 +70,11 @@ historiques `gtgweb-<timestamp>-<aléa>@gtgweb` cassent l'import (GTG #1289).
 
 ### Priorité moyenne
 
-- **`@DAV_gtg` visible dans GTG desktop** (tag technique de sync) : en réflexion,
-  piste : ne l'écrire que dans CATEGORIES, jamais dans la DESCRIPTION.
+- ~~**`@DAV_gtg` visible**~~ : côté gtgWeb, RIEN À FAIRE (analyse 2026-07-20). Le tag
+  `DAV_*` est déjà filtré à la lecture (`parser.js`) et jamais écrit (`builder.js`). La
+  pollution est côté GTG desktop (le tag y est ajouté à l'import puis affiché) : chantier
+  UPSTREAM GTG, hors périmètre gtgWeb. Le backend CalDAV 0.7 (PR #1265) fiabilise le tag
+  mais ne le masque pas ; piste upstream = notion de tag « système/caché » dans le core.
 - ~~**Sidebar remonte en haut au filtrage par tag**~~ : RÉSOLU 2026-07-20. `renderMain`
   capture le `scrollTop` de `#tag-list` avant reconstruction du DOM et le restaure après
   `renderTagList` (`ui.js`).
@@ -79,7 +82,10 @@ historiques `gtgweb-<timestamp>-<aléa>@gtgweb` cassent l'import (GTG #1289).
   `html.theme-dark` (thème forcé via les Paramètres) ne redéfinissait pas `--sidebar-bg`
   ni `--bg-tertiary`, contrairement au `@media (prefers-color-scheme: dark)`. Les deux
   blocs de thème forcé couvrent désormais le même jeu complet de variables (`style.css`).
-- **Pas de notifications utilisateur** : tâches orphelines et erreurs réseau restent silencieuses dans l'UI.
+- ~~**Pas de notifications utilisateur**~~ : TRAITÉ 2026-07-20 (robustesse mobile). Échec de
+  chargement → écran d'erreur + bouton « Réessayer » au lieu de la roue figée. Échec de
+  sauvegarde → l'éditeur reste ouvert, saisie préservée. Tâches illisibles écartées au parsing
+  → signalées (état `warning`). Orphelines : toujours visibles (rattachées à la racine).
 - **Appariement fragile dans `_parseMultistatus`** (audit 2026-07-20) : href / etag /
   calendar-data sont alignés par index positionnel (3 regex distinctes). Une `<response>`
   portant un getetag sans `.ics` désalignerait les tableaux → une tâche peut hériter de
@@ -105,10 +111,10 @@ historiques `gtgweb-<timestamp>-<aléa>@gtgweb` cassent l'import (GTG #1289).
 - [ ] Mode debug/verbose
 - [x] ~~Fix éditeur au démarrage~~ (obsolète, vérifié 2026-07-20 : non reproductible)
 - [ ] Fix scroll sidebar
-- [ ] Notifications utilisateur (orphelines, erreurs réseau)
+- [x] ~~Notifications utilisateur~~ (fait 2026-07-20 : chargement/sauvegarde résilients, tâches illisibles signalées)
 - [x] ~~Fournir les icônes (192 et 512) pour la PWA~~ (fait 2026-07-20, dossier `img/` versionné)
 - [ ] Bouton ↺ rechargement dans la toolbar
-- [ ] Masquer `DAV_gtg` (tag technique) de l'affichage dans l'éditeur
+- [x] ~~Masquer `DAV_gtg` de l'affichage~~ (côté gtgWeb : déjà géré, filtré ; reste un chantier upstream GTG, hors périmètre)
 - [ ] Nettoyer les tâches de test créées pendant le développement
 - [ ] Round-trip complet : créer dans gtgWeb, modifier dans GTG, revérifier dans gtgWeb
 - [x] ~~Socle de tests round-trip parser↔builder (pur JS)~~ (fait 2026-07-20, 11 cas,
