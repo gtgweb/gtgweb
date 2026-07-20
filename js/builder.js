@@ -48,7 +48,8 @@ const Builder = (() => {
     lines.push(`DTSTAMP:${now}`);
     lines.push('SEQUENCE:0');
 
-    // Tags + DAV_{calendarName} pour que GTG desktop identifie la tâche
+    // Tags utilisateur uniquement. Le tag technique DAV_ n'est jamais ecrit
+    // (cf. _buildCategories) : l'appartenance au calendrier passe par l'URL CalDAV.
     const allTags = _buildCategories(task.tags, calendarName);
     if (allTags.length > 0) {
       lines.push(`CATEGORIES:${allTags.join(',')}`);

@@ -218,12 +218,6 @@ const CalDAV = (() => {
     return _parseMultistatus(await response.text());
   }
 
-  async function get(uid, href = '') {
-    const response = await _request('GET', _fileFor(href || uid));
-    if (!response.ok) throw new Error(`get(${uid}) échoué : HTTP ${response.status}`);
-    return { uid, etag: response.headers.get('ETag') || '', ical: await response.text() };
-  }
-
   async function create(uid, ical, href = '') {
     const response = await _request('PUT', _fileFor(href || uid), {
       headers: { 'Content-Type': 'text/calendar; charset=utf-8' },
@@ -341,6 +335,6 @@ const CalDAV = (() => {
     return results;
   }
 
-  return { init, testConnection, listCalendars, fetchAll, get, create, update, remove };
+  return { init, testConnection, listCalendars, fetchAll, create, update, remove };
 
 })();
