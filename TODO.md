@@ -72,10 +72,10 @@ historiques `gtgweb-<timestamp>-<aléa>@gtgweb` cassent l'import (GTG #1289).
 - **`@DAV_gtg` visible dans GTG desktop** (tag technique de sync) : en réflexion,
   piste : ne l'écrire que dans CATEGORIES, jamais dans la DESCRIPTION.
 - **Sidebar remonte en haut au filtrage par tag** : sauvegarder puis restaurer `scrollTop`.
-- **Mode sombre : le menu des tags (sidebar) reste clair** : la sidebar / liste des
-  tags n'est pas affectée par le thème sombre, elle garde le fond clair. Piste :
-  couleurs en dur dans `style.css` au lieu des variables de thème, ou sélecteurs
-  `theme-dark` ne couvrant pas `.sidebar` / `.tag-list`.
+- ~~**Mode sombre : le menu des tags (sidebar) reste clair**~~ : RÉSOLU 2026-07-20.
+  `html.theme-dark` (thème forcé via les Paramètres) ne redéfinissait pas `--sidebar-bg`
+  ni `--bg-tertiary`, contrairement au `@media (prefers-color-scheme: dark)`. Les deux
+  blocs de thème forcé couvrent désormais le même jeu complet de variables (`style.css`).
 - **Pas de notifications utilisateur** : tâches orphelines et erreurs réseau restent silencieuses dans l'UI.
 - **Appariement fragile dans `_parseMultistatus`** (audit 2026-07-20) : href / etag /
   calendar-data sont alignés par index positionnel (3 regex distinctes). Une `<response>`

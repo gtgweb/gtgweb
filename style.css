@@ -848,23 +848,35 @@ a { text-decoration: none; color: inherit; }
   word-break: break-all;
 }
 
-/* ── Thèmes forcés ───────────────────────────────────────────────────────────── */
+/* ── Thèmes forcés ───────────────────────────────────────────────────────────────
+   IMPORTANT : ces deux blocs doivent redéfinir le MÊME jeu de variables que
+   @media (prefers-color-scheme: dark) plus haut. Sinon une variable oubliée
+   (ex. --sidebar-bg) garde sa valeur :root claire quand l'utilisateur force le
+   thème, et un pan de l'UI reste dans l'autre thème. */
 
 html.theme-light {
-  --bg:           #ffffff;
-  --bg-secondary: #f6f5f4;
-  --text:         #2e3436;
-  --text-muted:   #888;
-  --border:       #d3d7cf;
+  --bg:            #ffffff;
+  --bg-secondary:  #f6f5f4;
+  --bg-tertiary:   #edeceb;
+  --text:          #2e3436;
+  --text-muted:    #888;
+  --text-disabled: #adb5bd;
+  --border:        #d3d7cf;
+  --border-light:  #eaeaea;
+  --sidebar-bg:    #f6f5f4;
   color-scheme: light;
 }
 
 html.theme-dark {
-  --bg:           #1e1e2e;
-  --bg-secondary: #313244;
-  --text:         #cdd6f4;
-  --text-muted:   #a6adc8;
-  --border:       #45475a;
+  --bg:            #1e1e2e;
+  --bg-secondary:  #313244;
+  --bg-tertiary:   #313244;
+  --text:          #cdd6f4;
+  --text-muted:    #a6adc8;
+  --text-disabled: #585b70;
+  --border:        #45475a;
+  --border-light:  #313244;
+  --sidebar-bg:    #181825;
   color-scheme: dark;
 }
 
