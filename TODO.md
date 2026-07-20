@@ -85,7 +85,9 @@ historiques `gtgweb-<timestamp>-<aléa>@gtgweb` cassent l'import (GTG #1289).
 
 ### Priorité basse
 
-- **icons/icon-192.png absent du dépôt** : icône PWA en 404 (référencée par index.html et manifest.json).
+- ~~**icons/icon-192.png absent du dépôt**~~ : RÉSOLU 2026-07-20. Icônes versionnées dans
+  `img/` (192, 512, svg) ; `manifest.json` et `index.html` alignés sur `img/` (pas `icons/`,
+  alias Apache réservé). Déploiement : uploader `img/` et retirer l'ancien `icons/` côté serveur.
 - **Pas de bouton ↺ rechargement** dans la toolbar.
 - ~~Proxy `?action=calendars` régression 401~~ : RÉSOLU 2026-07-12, le proxy ne transmettait pas l'en-tête Authorization sans HTTP_AUTHORIZATION (commit 7f139fc).
 
@@ -101,7 +103,7 @@ historiques `gtgweb-<timestamp>-<aléa>@gtgweb` cassent l'import (GTG #1289).
 - [ ] Fix éditeur au démarrage
 - [ ] Fix scroll sidebar
 - [ ] Notifications utilisateur (orphelines, erreurs réseau)
-- [ ] Fournir icons/ (192 et 512) pour la PWA
+- [x] ~~Fournir les icônes (192 et 512) pour la PWA~~ (fait 2026-07-20, dossier `img/` versionné)
 - [ ] Bouton ↺ rechargement dans la toolbar
 - [ ] Masquer `DAV_gtg` (tag technique) de l'affichage dans l'éditeur
 - [ ] Nettoyer les tâches de test créées pendant le développement
