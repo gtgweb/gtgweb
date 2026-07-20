@@ -27,6 +27,22 @@ const CalDAV = (() => {
     return 'Basic ' + btoa(_username + ':' + _password);
   }
 
+  const _TIMEOUT_MS = 30000;  // au-dela, la requete est consideree perdue (reseau mobile)
+
+  // fetch avec timeout : un fetch nu pend indefiniment si le reseau se coupe en
+  // cours (tunnel, bascule wifi/4G). AbortController transforme ce blocage en
+  // erreur, geree comme une erreur reseau par les appelants (ecran Reessayer,
+  // editeur preserve). Rejette avec AbortError au-dela de _TIMEOUT_MS.
+  async function _fetchWithTimeout(url, config = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), _TIMEOUT_MS);
+    try {
+      return await fetch(url, { ...config, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async function _request(method, path = '', options = {}) {
     // Cible = proxy + segment calendrier choisi + fichier .ics
     const prefix = _calPath ? _calPath + '/' : '';
@@ -34,7 +50,7 @@ const CalDAV = (() => {
     const headers = { 'Authorization': _authHeader(), ...options.headers };
     const config  = { method, headers };
     if (options.body !== undefined) config.body = options.body;
-    return fetch(url, config);
+    return _fetchWithTimeout(url, config);
   }
 
   // ── Liste des calendriers ─────────────────────────────────────────────────
@@ -48,7 +64,7 @@ const CalDAV = (() => {
     const proxyBase = _url.endsWith('/') ? _url.slice(0, -1) : _url;
     const url = proxyBase + '?action=calendars';
 
-    const response = await fetch(url, {
+    const response = await _fetchWithTimeout(url, {
       method: 'PROPFIND',
       headers: { 'Authorization': _authHeader() },
     });
