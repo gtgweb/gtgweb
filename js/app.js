@@ -346,7 +346,7 @@ async function handleAction(action, payload) {
       if (!task.uid) break;
       UI.setSyncState('syncing');
       try {
-        await CalDAV.remove(task.uid, task.etag);
+        await CalDAV.remove(task.uid, task.etag, task.href);
         App.index.delete(task.uid);
         App.pendingTask = null;
         UI.closeEditor();
@@ -385,7 +385,7 @@ async function _saveTask(task) {
 
     let result;
     if (!task.raw) {
-      await CalDAV.create(task.uid, ical);
+      await CalDAV.create(task.uid, ical, task.href);
       result = { ok: true, conflict: false };
     } else {
       result = await CalDAV.update(task.uid, ical, task.etag, task.href);

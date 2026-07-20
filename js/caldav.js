@@ -166,13 +166,13 @@ const CalDAV = (() => {
     return _parseMultistatus(await response.text());
   }
 
-  async function get(uid) {
+  async function get(uid, href = '') {
     const response = await _request('GET', _fileFor(href || uid));
     if (!response.ok) throw new Error(`get(${uid}) échoué : HTTP ${response.status}`);
     return { uid, etag: response.headers.get('ETag') || '', ical: await response.text() };
   }
 
-  async function create(uid, ical) {
+  async function create(uid, ical, href = '') {
     const response = await _request('PUT', _fileFor(href || uid), {
       headers: { 'Content-Type': 'text/calendar; charset=utf-8' },
       body: ical,
@@ -211,7 +211,7 @@ const CalDAV = (() => {
     return { ok: true, conflict: false };
   }
 
-  async function remove(uid, etag = '') {
+  async function remove(uid, etag = '', href = '') {
     const headers = {};
 
     // GET frais pour récupérer l'ETag courant — même logique que update()
@@ -227,7 +227,8 @@ const CalDAV = (() => {
       if (etag) headers['If-Match'] = etag;
     }
 
-    const response = await _request('DELETE', uid + '.ics', { headers });
+    // Même fichier cible que le GET/PUT : href réel si connu, sinon uid.ics.
+    const response = await _request('DELETE', _fileFor(href || uid), { headers });
     if (!response.ok && response.status !== 204) {
       throw new Error(`remove(${uid}) échoué : HTTP ${response.status}`);
     }
