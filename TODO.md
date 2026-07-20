@@ -1,6 +1,6 @@
 # gtgWeb — État du projet & TODO
 
-Dernière mise à jour : 2026-07-12
+Dernière mise à jour : 2026-07-20
 
 ---
 
@@ -13,6 +13,9 @@ Dernière mise à jour : 2026-07-12
 - Dates fuzzy (Maintenant / Bientôt / Un jour / Plus tard) et dates réelles
 - Sauvegarde (bouton ← Sauvegarder) avec ETag frais (GET avant PUT), unfold CRLF/LF
 - Annulation sans sauvegarde ; suppression définitive avec ETag frais (GET avant DELETE)
+- Création / suppression ciblant le vrai nom de fichier `.ics` (href), pas `uid.ics`
+  (fix 2026-07-20 : `href` n'était pas défini dans `create`/`remove` — régression du
+  commit href f2f8939, création de tâche cassée ; DELETE aligné sur `_fileFor(href||uid)`)
 - Marquer comme fait / Ignorer ; Abandonner / Rouvrir une tâche fermée
 - Synchronisation bidirectionnelle gtgWeb ↔ GTG desktop 0.6 ✅
 - Panneau Paramètres (⚙) : nom du calendrier, thème, aperçu, info proxy
@@ -65,7 +68,16 @@ historiques `gtgweb-<timestamp>-<aléa>@gtgweb` cassent l'import (GTG #1289).
 - **`@DAV_gtg` visible dans GTG desktop** (tag technique de sync) : en réflexion,
   piste : ne l'écrire que dans CATEGORIES, jamais dans la DESCRIPTION.
 - **Sidebar remonte en haut au filtrage par tag** : sauvegarder puis restaurer `scrollTop`.
+- **Mode sombre : le menu des tags (sidebar) reste clair** : la sidebar / liste des
+  tags n'est pas affectée par le thème sombre, elle garde le fond clair. Piste :
+  couleurs en dur dans `style.css` au lieu des variables de thème, ou sélecteurs
+  `theme-dark` ne couvrant pas `.sidebar` / `.tag-list`.
 - **Pas de notifications utilisateur** : tâches orphelines et erreurs réseau restent silencieuses dans l'UI.
+- **Appariement fragile dans `_parseMultistatus`** (audit 2026-07-20) : href / etag /
+  calendar-data sont alignés par index positionnel (3 regex distinctes). Une `<response>`
+  portant un getetag sans `.ics` désalignerait les tableaux → une tâche peut hériter de
+  l'ETag d'une autre (conflit silencieux). OK en pratique sur Nextcloud, fragile sur le
+  point critique de l'identité CalDAV.
 
 ### Priorité basse
 
@@ -90,6 +102,13 @@ historiques `gtgweb-<timestamp>-<aléa>@gtgweb` cassent l'import (GTG #1289).
 - [ ] Masquer `DAV_gtg` (tag technique) de l'affichage dans l'éditeur
 - [ ] Nettoyer les tâches de test créées pendant le développement
 - [ ] Round-trip complet : créer dans gtgWeb, modifier dans GTG, revérifier dans gtgWeb
+- [ ] Socle de tests round-trip parser↔builder (pur JS) : filet anti-régression avant
+      Cap 0.7 (aurait attrapé le bug href) — recoupe « Fixtures de conformité »
+- [ ] Dédupliquer la regex `@tag` (présente dans 5 fichiers) et `unfold`
+      (implémentations divergentes entre parser.js et builder.js)
+- [ ] Durcir `proxy.php` : borner `$path` (neutraliser `../`), éviter `Access-Control-Allow-Origin: *` par défaut
+- [ ] Hygiène dépôt : ranger ou ignorer les `porteur-*.py`, `files.zip`, `manifest.json~` ; élargir `.gitignore`
+- [ ] Retirer `CalDAV.get()` (code mort) ou lui donner un usage
 - [ ] Publier la démo (mode démo sans configuration) : ASAP
 - [ ] Documenter l'installation dans README.md ; README bilingue FR/EN
 - [ ] Release v1.0 taggée sur GitHub

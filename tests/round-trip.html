@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>gtgWeb — Tests round-trip</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto;
+           padding: 0 1rem; color: #1e1e2e; }
+    h1 { font-size: 1.4rem; }
+    .summary { font-size: 1.1rem; font-weight: 600; margin: 1rem 0; padding: .6rem 1rem;
+               border-radius: 6px; }
+    .summary.ok  { background: #eafbf0; color: #1a7f3c; }
+    .summary.ko  { background: #fdecec; color: #c0281f; }
+    ul { list-style: none; padding: 0; }
+    li { padding: .5rem .8rem; border-bottom: 1px solid #eee; display: flex; gap: .6rem;
+         align-items: baseline; }
+    .mark { font-weight: 700; }
+    li.pass .mark { color: #1a7f3c; }
+    li.fail .mark { color: #c0281f; }
+    .name { flex: 1; }
+    .detail { display: block; color: #c0281f; font-family: monospace; font-size: .85rem;
+              margin-top: .3rem; white-space: pre-wrap; }
+    footer { margin-top: 2rem; color: #888; font-size: .85rem; }
+  </style>
+</head>
+<body>
+  <h1>gtgWeb — Tests round-trip parser ↔ builder</h1>
+  <div id="summary" class="summary">Exécution…</div>
+  <ul id="results"></ul>
+  <footer>
+    Pur JS, aucune dépendance. Recharge la page pour rejouer.
+    Voir <code>tests/round-trip.js</code> pour les cas.
+  </footer>
+
+  <!-- Modules testés : chargés tels quels (globals Parser / Builder) -->
+  <script src="../js/parser.js"></script>
+  <script src="../js/builder.js"></script>
+
+  <!-- Cas de test -->
+  <script src="round-trip.js"></script>
+
+  <!-- Runner + rendu -->
+  <script>
+    'use strict';
+    const results = runRoundTripTests();
+    const passed  = results.filter(r => r.pass).length;
+    const total   = results.length;
+
+    const summary = document.getElementById('summary');
+    summary.textContent = `${passed}/${total} tests réussis`;
+    summary.className = 'summary ' + (passed === total ? 'ok' : 'ko');
+
+    const ul = document.getElementById('results');
+    for (const r of results) {
+      const li = document.createElement('li');
+      li.className = r.pass ? 'pass' : 'fail';
+      const mark = document.createElement('span');
+      mark.className = 'mark';
+      mark.textContent = r.pass ? '✓' : '✗';
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = r.name;
+      if (r.detail) {
+        const d = document.createElement('span');
+        d.className = 'detail';
+        d.textContent = r.detail;
+        name.appendChild(d);
+      }
+      li.appendChild(mark);
+      li.appendChild(name);
+      ul.appendChild(li);
+    }
+  </script>
+</body>
+</html>

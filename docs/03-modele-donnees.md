@@ -54,8 +54,15 @@ La DESCRIPTION contient **tout le texte libre** de la tâche, y compris :
 - Les `@tags` inline
 - Les `[ ] Sous-tâche` inline
 
-**gtgWeb ne doit jamais modifier la DESCRIPTION** pour en retirer ou ajouter
-des éléments structurels. Elle est sauvegardée telle quelle.
+**gtgWeb préserve le corps de la note tel quel**, y compris les `@tags` au fil
+du texte (comportement 100% GTG-like) et les `[ ] Sous-tâche`.
+
+**Seule exception, alignée sur GTG desktop** : les `@tags` **collés en tête** de
+la première ligne sont retirés à l'écriture. Ce sont des métadonnées déjà
+indexées dans CATEGORIES, et GTG desktop fait de même dans sa projection CalDAV.
+Le retrait s'arrête au premier mot qui n'est pas un tag : un `@tag` situé plus
+loin dans la phrase, ou sur une autre ligne, est **conservé**.
+Implémentation : `_stripLeadingTags` dans `builder.js`.
 
 ### CATEGORIES = index des tags
 
@@ -101,7 +108,8 @@ pour maximiser la compatibilité entre clients.
 
 ### À la sauvegarde (builder.js)
 
-- Sauvegarder la DESCRIPTION **telle quelle** — ne rien retirer, ne rien ajouter
+- Sauvegarder le corps de la DESCRIPTION **tel quel**, sauf les `@tags` collés en
+  tête de la première ligne, retirés car redondants avec CATEGORIES (voir plus haut)
 - Mettre à jour CATEGORIES depuis les `@tags` détectés dans la DESCRIPTION
 - Mettre à jour RELATED-TO depuis les `[ ] xxx` détectés dans la DESCRIPTION
 
