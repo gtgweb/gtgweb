@@ -43,6 +43,42 @@ const CalDAV = (() => {
     }
   }
 
+  // Statuts transitoires : on retente. 401/403/404 (auth, chemin) ne se
+  // resolvent jamais en reessayant, on ne les retente pas.
+  function _isRetryableStatus(status) {
+    return status === 429 || (status >= 500 && status <= 599);
+  }
+
+  function _delay(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+  // Backoff exponentiel + jitter (0.5s, 1s... + part aleatoire) pour ne pas
+  // re-taper le serveur en rafale synchronisee.
+  function _backoff(attempt) {
+    return 500 * Math.pow(2, attempt) + Math.random() * 250;
+  }
+
+  // Retente une operation de LECTURE (idempotente) sur erreur transitoire :
+  // exception reseau (timeout AbortError, 'failed to fetch') ou statut 429/5xx.
+  // JAMAIS applique aux ecritures (PUT/DELETE) : cf. piste "file hors-ligne".
+  async function _withRetry(fn, attempts = 3) {
+    let lastErr;
+    for (let i = 0; i < attempts; i++) {
+      try {
+        const res = await fn();
+        if (_isRetryableStatus(res.status) && i < attempts - 1) {
+          await _delay(_backoff(i));
+          continue;
+        }
+        return res;
+      } catch (e) {
+        lastErr = e;
+        if (i < attempts - 1) { await _delay(_backoff(i)); continue; }
+        throw e;
+      }
+    }
+    throw lastErr;
+  }
+
   async function _request(method, path = '', options = {}) {
     // Cible = proxy + segment calendrier choisi + fichier .ics
     const prefix = _calPath ? _calPath + '/' : '';
@@ -64,10 +100,10 @@ const CalDAV = (() => {
     const proxyBase = _url.endsWith('/') ? _url.slice(0, -1) : _url;
     const url = proxyBase + '?action=calendars';
 
-    const response = await _fetchWithTimeout(url, {
+    const response = await _withRetry(() => _fetchWithTimeout(url, {
       method: 'PROPFIND',
       headers: { 'Authorization': _authHeader() },
-    });
+    }));
 
     if (!response.ok && response.status !== 207) {
       throw new Error(`listCalendars échoué : HTTP ${response.status}`);
@@ -130,9 +166,9 @@ const CalDAV = (() => {
 
   async function testConnection() {
     try {
-      const response = await _request('PROPFIND', '', {
+      const response = await _withRetry(() => _request('PROPFIND', '', {
         headers: { 'Depth': '0', 'Content-Type': 'application/xml; charset=utf-8' },
-      });
+      }));
 
       if (response.status === 207 || response.ok) {
         // Extraire le displayname depuis la réponse
@@ -170,10 +206,10 @@ const CalDAV = (() => {
   </C:filter>
 </C:calendar-query>`;
 
-    const response = await _request('REPORT', '', {
+    const response = await _withRetry(() => _request('REPORT', '', {
       headers: { 'Depth': '1', 'Content-Type': 'application/xml; charset=utf-8' },
       body,
-    });
+    }));
 
     if (!response.ok && response.status !== 207) {
       throw new Error(`fetchAll échoué : HTTP ${response.status}`);
