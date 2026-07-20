@@ -139,8 +139,12 @@ async function handleAction(action, payload) {
           const only = calendars[0];
           await _finalizeLogin(payload, only.name || result.calendarName || '', only.segment || '', true);
         } else if (calendars.length === 0) {
-          // Aucun calendrier liste : utiliser le displayname detecte.
-          await _finalizeLogin(payload, result.calendarName || '', '', true);
+          // La liste a reussi mais expose 0 calendrier acceptant les VTODO.
+          // Ne PAS retomber sur la racine des calendriers : ce n'est pas un
+          // calendrier, les VTODO n'y sont ni listables ni creables. On le dit
+          // clairement plutot que d'aboutir a un ecran vide inexplicable.
+          UI.renderLogin('Aucun calendrier de tâches (VTODO) trouvé sur ce serveur. ' +
+            'Créez un calendrier de tâches dans Nextcloud, puis reconnectez-vous.');
         } else {
           // Plusieurs calendriers : laisser l'utilisateur choisir.
           UI.renderCalendarPicker(calendars, result.calendarName, payload);

@@ -47,17 +47,21 @@ historiques `gtgweb-<timestamp>-<aléa>@gtgweb` cassent l'import (GTG #1289).
 
 ### Priorité haute
 
-- **Sélecteur de calendrier en trompe-l'œil** : le calendrier choisi (`calendarName`)
-  décore le VTODO mais ne pilote PAS l'URL cible. Les requêtes visent le calendrier
-  figé dans `proxy-config.php` (`$CALDAV_URL`), pas celui sélectionné. `CalDAV.init`
-  ne reçoit jamais `calendarName`. La sélection doit réellement changer l'URL cible.
-- **Filtrer les calendriers VTODO** : le sélecteur propose tous les calendriers, y
-  compris ceux de type VEVENT. Choisir un calendrier d'événements produit un 403
-  (`InvalidComponentType`) à la création. N'afficher que les calendriers acceptant
-  les VTODO, ou avertir clairement si l'utilisateur en choisit un autre.
-- **Test de connexion avant validation du calendrier** : valider un calendrier sans
-  vérifier qu'une écriture VTODO y est possible mène à une config qui ne marche pas.
-  Tester (PROPFIND + capacité VTODO) avant de valider le choix.
+- ~~**Sélecteur de calendrier en trompe-l'œil**~~ : RÉSOLU (constat audit 2026-07-20).
+  Le pilotage se fait par `calendarSegment` (segment technique), pas `calendarName` :
+  picker (`ui.js:112`) → `_finalizeLogin` → `CalDAV.init` → `_calPath` → préfixe de
+  toutes les requêtes dans `_request` (`caldav.js:32`). Segment persisté et restauré au
+  rechargement. La refonte de l'écran de connexion (14dabf4) avait déjà corrigé ce point.
+  Aucun cas de mauvais calendrier constaté sur le terrain.
+- ~~**Filtrer les calendriers VTODO**~~ : RÉSOLU. `_parseCalendarList` ne retient que
+  les calendriers acceptant les VTODO (`acceptsVTODO`, `caldav.js:93-100`).
+- **Test de connexion + capacité d'écriture VTODO avant validation du calendrier** : on
+  teste aujourd'hui la connexion (PROPFIND) mais pas qu'une écriture VTODO est possible
+  sur le calendrier retenu. À faire : vérifier la capacité VTODO avant de valider le
+  choix, et sécuriser le repli quand `listCalendars` renvoie 0 (segment vide → requêtes
+  sur la racine des calendriers) avec le même test de conformité. NB : re-choisir un
+  calendrier depuis les Paramètres est volontairement bloqué tant qu'on n'est pas en
+  multi-calendrier (prévu v2).
 - **Mode debug/verbose** : ajouter un mode qui affiche les URL cibles, codes HTTP et
   en-têtes, pour diagnostiquer sans sonde manuelle côté serveur.
 - **Éditeur s'ouvre au démarrage** : `App.pendingTask` non null au chargement,
@@ -91,8 +95,8 @@ historiques `gtgweb-<timestamp>-<aléa>@gtgweb` cassent l'import (GTG #1289).
 
 - [x] ~~Audit et redéploiement propre du serveur depuis git~~ (fait 2026-07-12, www ISO git)
 - [ ] Re-valider sur le terrain : recherche (desktop, mobile, @tag) et Rouvrir
-- [ ] Corriger la tuyauterie du sélecteur de calendrier (piloter l'URL cible)
-- [ ] Filtrer/valider les calendriers VTODO + test de connexion préalable
+- [x] ~~Corriger la tuyauterie du sélecteur de calendrier (piloter l'URL cible)~~ (constaté OK 2026-07-20, pilotage par `calendarSegment`)
+- [ ] Test de connexion + capacité d'écriture VTODO avant validation (repli racine inclus) — filtrage VTODO déjà fait
 - [ ] Mode debug/verbose
 - [ ] Fix éditeur au démarrage
 - [ ] Fix scroll sidebar
@@ -102,8 +106,8 @@ historiques `gtgweb-<timestamp>-<aléa>@gtgweb` cassent l'import (GTG #1289).
 - [ ] Masquer `DAV_gtg` (tag technique) de l'affichage dans l'éditeur
 - [ ] Nettoyer les tâches de test créées pendant le développement
 - [ ] Round-trip complet : créer dans gtgWeb, modifier dans GTG, revérifier dans gtgWeb
-- [ ] Socle de tests round-trip parser↔builder (pur JS) : filet anti-régression avant
-      Cap 0.7 (aurait attrapé le bug href) — recoupe « Fixtures de conformité »
+- [x] ~~Socle de tests round-trip parser↔builder (pur JS)~~ (fait 2026-07-20, 11 cas,
+      `tests/round-trip.html` + `.js`, commit 69f23bb) — base à étendre pour « Fixtures de conformité »
 - [ ] Dédupliquer la regex `@tag` (présente dans 5 fichiers) et `unfold`
       (implémentations divergentes entre parser.js et builder.js)
 - [ ] Durcir `proxy.php` : borner `$path` (neutraliser `../`), éviter `Access-Control-Allow-Origin: *` par défaut
