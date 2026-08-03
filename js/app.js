@@ -13,6 +13,8 @@ const App = {
   all:          [],
   config:       {},
   pendingTask:  null,
+  pendingDraft: null,   // brouillon local detecte a l'ouverture, en attente d'arbitrage
+  drafts:       [],     // brouillons non synchronises, signales au-dessus de la liste
   calendarName: '',   // displayname du calendrier actif (ex: 'gtg')
 
   // Sauvegarde continue facon GTG (cf. editor.py light_save / SAVETIME=7).
@@ -130,6 +132,8 @@ function renderListOnly() {
 
 function renderCurrentView() {
   const { activeView } = App.config;
+  // Recense a chaque rendu : un brouillon peut naitre ou disparaitre entre deux.
+  App.drafts = _draftList();
 
   let tasks = Tree.filterByView(App.all, App.index, activeView);
   tasks = _applyFilters(tasks);
@@ -280,6 +284,11 @@ async function handleAction(action, payload) {
     // ── Éditeur ─────────────────────────────────────────────────────────────
     case 'openTask': {
       App.pendingTask = { ...payload.task };
+      // Brouillon local non confirme par le serveur : on le signale sans rien
+      // decider a la place de l'operateur (piece 2 de la sauvegarde continue).
+      const draft = _draftLoad(payload.task);
+      App.pendingDraft = _draftDiffers(draft, payload.task) ? draft : null;
+      if (!App.pendingDraft) _draftClear(payload.task);
       // Ouvrir une tache ne la sauvegarde pas : on part d'un compteur neuf
       // (GTG fait de meme, cf. le garde-fou get_editable() de light_save).
       App.autosave = { lastSave: Date.now(), pending: false, dirty: false };
@@ -294,7 +303,8 @@ async function handleAction(action, payload) {
         tags: [], due: null, start: null, fuzzy: null,
         children: [], parent: null, sequence: 0, etag: '', raw: '',
       };
-      App.pendingTask = { ...task };
+      App.pendingTask  = { ...task };
+      App.pendingDraft = null;   // une tache neuve n'a pas de passe
       App.autosave = { lastSave: Date.now(), pending: false, dirty: false };
       UI.renderEditor(task);
       break;
@@ -302,6 +312,20 @@ async function handleAction(action, payload) {
 
     case 'editorTitleChange': {
       if (App.pendingTask) App.pendingTask.title = payload.title;
+      break;
+    }
+
+    // Frappe brute, emise a chaque touche (composition IME comprise). Tient le
+    // brouillon local a jour sans attendre le re-stylage, qui est volontairement
+    // lent et suspendu pendant la composition. Le rythme reseau ne change pas :
+    // _lightSave conserve son throttle a 7 s.
+    case 'editorInput': {
+      const { newTitle, text } = payload;
+      if (App.pendingTask) {
+        if (newTitle !== undefined) App.pendingTask.title = newTitle;
+        App.pendingTask.description = text;
+        await _lightSave();
+      }
       break;
     }
 
@@ -324,6 +348,65 @@ async function handleAction(action, payload) {
         else { App.pendingTask.start = date; }
         await _lightSave();
       }
+      break;
+    }
+
+    // ── Ouvrir une tache depuis le bandeau des brouillons ───────────────────
+    case 'openDraft': {
+      const { uid } = payload;
+      const server  = App.index.get(uid);
+      if (server) {
+        // Tache connue : ouverture normale, le bandeau d'arbitrage prendra le relais.
+        return handleAction('openTask', { task: server });
+      }
+      // Creation jamais partie : l'editeur repart du brouillon seul, sinon la
+      // saisie serait definitivement perdue.
+      let draft = null;
+      try {
+        const entry = (App.drafts || []).find(d => d.uid === uid);
+        if (entry) draft = JSON.parse(localStorage.getItem(entry.key));
+      } catch (e) { draft = null; }
+      if (!draft) break;
+
+      const task = {
+        uid: draft.uid || Builder.generateUID(),
+        title: draft.title || '', status: 'NEEDS-ACTION',
+        description: draft.description || '', tags: draft.tags || [],
+        due: draft.due || null, start: draft.start || null, fuzzy: draft.fuzzy || null,
+        children: [], parent: null, sequence: 0, etag: '', raw: '',
+        href: draft.href || '',
+      };
+      App.pendingTask  = { ...task };
+      App.pendingDraft = null;
+      // Contenu jamais confirme par le serveur : la fermeture doit l'envoyer.
+      App.autosave = { lastSave: Date.now(), pending: false, dirty: true };
+      UI.renderEditor(task);
+      break;
+    }
+
+    // ── Arbitrage du brouillon local ────────────────────────────────────────
+    case 'restoreDraft': {
+      const draft = App.pendingDraft;
+      if (draft && App.pendingTask) {
+        App.pendingTask.title       = draft.title || '';
+        App.pendingTask.description = draft.description || '';
+        if (draft.tags)  App.pendingTask.tags  = draft.tags;
+        if (draft.due !== undefined)   App.pendingTask.due   = draft.due;
+        if (draft.start !== undefined) App.pendingTask.start = draft.start;
+        if (draft.fuzzy !== undefined) App.pendingTask.fuzzy = draft.fuzzy;
+        // Le contenu restaure n'est pas encore sur le serveur.
+        App.autosave.dirty = true;
+        App.pendingDraft   = null;
+        UI.applyDraftToEditor(App.pendingTask);
+      }
+      break;
+    }
+
+    case 'discardDraft': {
+      // L'operateur garde la version serveur : le brouillon n'a plus lieu d'etre.
+      if (App.pendingTask) _draftClear(App.pendingTask);
+      App.pendingDraft = null;
+      UI.hideDraftNotice();
       break;
     }
 
@@ -466,6 +549,83 @@ function _draftSave(task) {
     // Quota plein ou stockage indisponible : on continue, le PUT reste la voie normale.
     console.warn('gtgWeb : brouillon local non ecrit', e);
   }
+}
+
+/**
+ * Relit le brouillon local d'une tache, s'il en existe un. Un brouillon
+ * present signifie que le serveur n'a jamais confirme cette saisie : soit
+ * l'onglet est mort avant l'ecriture, soit le reseau a fait defaut.
+ * @returns {object|null}
+ */
+function _draftLoad(task) {
+  try {
+    const raw = localStorage.getItem(_draftKey(task));
+    if (!raw) return null;
+    const draft = JSON.parse(raw);
+    return (draft && typeof draft === 'object') ? draft : null;
+  } catch (e) {
+    console.warn('gtgWeb : brouillon local illisible', e);
+    return null;
+  }
+}
+
+/**
+ * Un brouillon n'a d'interet que s'il differe de la version serveur : apres
+ * une ecriture reussie il est purge, mais un residu peut survivre a un
+ * incident. On ne derange pas l'operateur pour un contenu identique.
+ */
+function _draftDiffers(draft, task) {
+  if (!draft) return false;
+  const norm = (v) => (v === undefined || v === null) ? '' : String(v);
+  return norm(draft.title) !== norm(task.title) ||
+         norm(draft.description) !== norm(task.description);
+}
+
+/**
+ * Recense tous les brouillons locaux non confirmes par le serveur.
+ * Purge au passage ceux qui ne different plus de la version serveur
+ * (residus d'une ecriture reussie) et ceux qui sont illisibles.
+ * Un brouillon dont la tache est absente de l'index correspond a une creation
+ * qui n'est jamais partie : il est signale comme tel, surtout pas efface.
+ * @returns {Array<{key, uid, href, title, savedAt, orphan}>}
+ */
+function _draftList() {
+  const out = [];
+  let keys = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('gtgweb:draft:')) keys.push(k);
+    }
+  } catch (e) {
+    console.warn('gtgWeb : stockage local illisible', e);
+    return out;
+  }
+
+  for (const key of keys) {
+    let draft = null;
+    try { draft = JSON.parse(localStorage.getItem(key)); } catch (e) { draft = null; }
+    if (!draft || typeof draft !== 'object') {
+      try { localStorage.removeItem(key); } catch (e) { /* sans effet */ }
+      continue;
+    }
+
+    const server = draft.uid ? App.index.get(draft.uid) : null;
+    if (server && !_draftDiffers(draft, server)) {
+      try { localStorage.removeItem(key); } catch (e) { /* sans effet */ }
+      continue;
+    }
+
+    out.push({
+      key,
+      uid:     draft.uid  || '',
+      href:    draft.href || '',
+      title:   draft.title || '(sans titre)',
+      savedAt: draft.savedAt || 0,
+      orphan:  !server,
+    });
+  }
+  return out;
 }
 
 function _draftClear(task) {

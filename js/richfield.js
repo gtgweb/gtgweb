@@ -216,10 +216,18 @@ const RichField = (function () {
   }
 
   // ---- Attache le comportement à un élément contenteditable ----
-  // opts: { colorFn(tag)->color, onChange(lines) }
+  // opts: { colorFn(tag)->color, onChange(lines), onInput(lines) }
+  //
+  // onChange : emis apres re-stylage (process), donc jamais pendant une
+  //   composition IME et seulement sur les temps morts. C'est le rythme du
+  //   rendu, volontairement lent.
+  // onInput  : emis a CHAQUE frappe, y compris en pleine composition. Lecture
+  //   pure du DOM (getLines), aucun re-rendu, aucun deplacement de curseur.
+  //   Destine au filet de sauvegarde local, qui ne doit rien rater.
   function attach(el, opts = {}) {
     const colorFn = opts.colorFn || null;
     const onChange = opts.onChange || null;
+    const onInput  = opts.onInput  || null;
     let timer = null;
 
     function currentPos() {
@@ -270,10 +278,23 @@ const RichField = (function () {
       }
       if (e.key === ' ' && !composing) { setTimeout(process, 0); }
     });
+    // Remontee immediate du texte brut, sans toucher au DOM. Isolee dans un
+    // try/catch : le filet de sauvegarde ne doit jamais casser la saisie.
+    function emitInput() {
+      if (!onInput) return;
+      try { onInput(getLines(el)); }
+      catch (e) { console.warn('gtgWeb RichField : onInput', e); }
+    }
+
     el.addEventListener('input', () => {
+      emitInput();
       clearTimeout(timer);
       timer = setTimeout(process, PROCESSING_DELAY);
     });
+    // Pendant la composition (clavier predictif mobile), process() reste
+    // bloque : sans ce relais, le texte en cours de composition n'atteindrait
+    // jamais le brouillon local.
+    el.addEventListener('compositionupdate', emitInput);
     el.addEventListener('blur', process);
 
     // Composition clavier (mobile/IME) : suspendre le rendu pendant, reprendre apres.

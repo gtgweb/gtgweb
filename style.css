@@ -637,6 +637,60 @@ a { text-decoration: none; color: inherit; }
   color: var(--text-muted);
 }
 
+/* Bandeau au-dessus de la liste : brouillons non synchronises, une ligne par
+   tache. Reste tant que le brouillon existe. */
+.drafts-banner:empty { display: none; }
+
+.drafts-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid var(--orange);
+  font-size: 13px;
+  cursor: pointer;
+}
+.drafts-row:hover { background: var(--bg-secondary); }
+
+.drafts-row-title {
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 45%;
+}
+
+.drafts-row-info { flex: 1; color: var(--text-muted); font-size: 12px; }
+
+.drafts-row-action { color: var(--accent); white-space: nowrap; }
+
+/* Bandeau de brouillon local non synchronise. Discret mais visible : il ne
+   decide rien a la place de l'operateur, il l'informe et lui laisse la main. */
+.draft-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid var(--orange);
+  font-size: 13px;
+  color: var(--text);
+}
+.draft-notice.hidden { display: none; }
+
+.draft-notice-text { flex: 1; min-width: 180px; }
+
+.draft-notice-actions {
+  display: flex;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+}
+
 /* Menu ⋮ de l'en-tete editeur (Abandonner, Supprimer), facon GTG. */
 .editor-menu { position: relative; }
 

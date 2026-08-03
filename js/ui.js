@@ -317,6 +317,7 @@ const UI = (() => {
             <button class="btn btn--primary btn--small" id="btn-new-task">+ Tâche</button>
           </div>
         </header>
+        <div class="drafts-banner" id="drafts-banner"></div>
         <div class="task-list" id="task-list"></div>
       </main>
 
@@ -324,6 +325,7 @@ const UI = (() => {
       <div class="sync-indicator" id="sync-indicator"></div>
     `;
 
+    renderDraftsBanner((window.App && window.App.drafts) || []);
     renderTagList(tagList, untagged);
     const _tagListEl = document.getElementById('tag-list');
     if (_tagListEl) _tagListEl.scrollTop = _prevTagScroll;
@@ -580,6 +582,16 @@ const UI = (() => {
           <button class="btn btn--icon" id="btn-save-editor" title="Fermer" aria-label="Fermer">✕</button>
         </header>
 
+        <div class="draft-notice hidden" id="draft-notice" role="status">
+          <span class="draft-notice-text">
+            Un brouillon local n'a jamais été enregistré sur le serveur.
+          </span>
+          <span class="draft-notice-actions">
+            <button class="btn btn--small" id="btn-draft-restore">Restaurer le brouillon</button>
+            <button class="btn btn--ghost btn--small" id="btn-draft-discard">Garder la version serveur</button>
+          </span>
+        </div>
+
         <div class="editor-dates">
           <div class="date-field">
             <label>Commence le</label>
@@ -614,6 +626,13 @@ const UI = (() => {
     const richEl = document.getElementById('editor-rich');
     const rich = RichField.attach(richEl, {
       colorFn: (tag) => Storage.tagColor(tag),
+      // Filet local : emis a chaque frappe, meme en composition IME. Sert
+      // uniquement a tenir le brouillon a jour, sans rien redessiner.
+      onInput: (lines) => {
+        const newTitle = (lines[0] || '').trim();
+        const body = lines.slice(1).join('\n');
+        _onAction('editorInput', { uid: task.uid, task, newTitle, text: body });
+      },
       onChange: (lines) => {
         // 1re ligne = titre ; le reste = description (le titre ne doit PAS
         // se recopier dans la note, sinon il s'empile a chaque sauvegarde).
@@ -675,6 +694,24 @@ const UI = (() => {
     document.getElementById('btn-save-editor').addEventListener('click', () =>
       _onAction('saveAndClose', {}));
 
+    // Brouillon local detecte a l'ouverture : bandeau d'arbitrage.
+    const draft = (window.App && window.App.pendingDraft) || null;
+    if (draft) {
+      const notice = document.getElementById('draft-notice');
+      if (notice) notice.classList.remove('hidden');
+      const when = document.querySelector('.draft-notice-text');
+      if (when && draft.savedAt) {
+        when.textContent =
+          `Un brouillon local du ${_formatDraftDate(draft.savedAt)} n'a jamais été enregistré sur le serveur.`;
+      }
+      document.getElementById('btn-draft-restore').addEventListener('click', () => {
+        hideDraftNotice();
+        _onAction('restoreDraft', {});
+      });
+      document.getElementById('btn-draft-discard').addEventListener('click', () =>
+        _onAction('discardDraft', {}));
+    }
+
     if (task.status === 'COMPLETED' || task.status === 'CANCELLED') {
       document.getElementById('btn-reopen').addEventListener('click', () => {
         _onAction('reopenTask', { uid: task.uid, task });
@@ -710,6 +747,76 @@ const UI = (() => {
         }
       });
     }
+  }
+
+  // ── Brouillon local ───────────────────────────────────────────────────────
+
+  /**
+   * Bandeau au-dessus de la liste : une ligne par brouillon non synchronise.
+   * Il reste tant que le brouillon existe (c'est un filet, pas une notification).
+   */
+  function renderDraftsBanner(drafts) {
+    const el = document.getElementById('drafts-banner');
+    if (!el) return;
+    if (!drafts || drafts.length === 0) { el.innerHTML = ''; return; }
+
+    el.innerHTML = drafts.map(d => `
+      <div class="drafts-row" data-uid="${_escape(d.uid)}" role="button" tabindex="0">
+        <span class="drafts-row-title">${_escape(d.title)}</span>
+        <span class="drafts-row-info">
+          ${d.orphan ? 'jamais créée sur le serveur' : 'modification non enregistrée'}${
+            d.savedAt ? ' · ' + _formatDraftDate(d.savedAt) : ''}
+        </span>
+        <span class="drafts-row-action">Ouvrir</span>
+      </div>
+    `).join('');
+
+    el.querySelectorAll('.drafts-row').forEach(row => {
+      const open = () => _onAction('openDraft', { uid: row.dataset.uid });
+      row.addEventListener('click', open);
+      row.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+      });
+    });
+  }
+
+  function _formatDraftDate(ts) {
+    try {
+      return new Date(ts).toLocaleString('fr-FR',
+        { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    } catch (e) { return ''; }
+  }
+
+  function hideDraftNotice() {
+    const notice = document.getElementById('draft-notice');
+    if (notice) notice.classList.add('hidden');
+  }
+
+  /**
+   * Recharge le champ riche avec le contenu restaure, sans reconstruire tout
+   * l'editeur (les dates et l'etat de la tache restent en place).
+   */
+  function applyDraftToEditor(task) {
+    const rich = window.App && window.App.richField;
+    if (rich) rich.setContent(task.title || '', task.description || '', []);
+
+    const hdr = document.getElementById('editor-header-title');
+    if (hdr) hdr.textContent = task.title || 'Nouvelle tâche';
+
+    // Les dates aussi : sans cela l'ecran afficherait encore les valeurs du
+    // serveur alors que la tache en memoire porte celles du brouillon, et la
+    // sauvegarde ecrirait autre chose que ce qui est affiche.
+    const startEl = document.getElementById('input-start');
+    if (startEl) startEl.value = task.start ? _dateToInput(task.start) : '';
+
+    const dueEl = document.getElementById('input-due');
+    if (dueEl) dueEl.value = (task.due && !task.fuzzy) ? _dateToInput(task.due) : '';
+
+    document.querySelectorAll('.fuzzy-btn[data-field="due"]').forEach(b => {
+      b.classList.toggle('fuzzy-btn--active', !!task.fuzzy && b.dataset.fuzzy === task.fuzzy);
+    });
+
+    hideDraftNotice();
   }
 
   // ── Menu ⋮ de l'editeur ───────────────────────────────────────────────────
@@ -827,6 +934,7 @@ const UI = (() => {
     renderMain, renderTaskList, renderTagList, renderEditor, closeEditor,
     setSyncState, toggleExpanded, toggleAll, applyTheme,
     renderLoading, renderLoadError,
+    hideDraftNotice, applyDraftToEditor, renderDraftsBanner,
   };
 
 })();
