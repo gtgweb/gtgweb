@@ -1,123 +1,141 @@
 # gtgWeb
 
-**Getting Things GNOME — dans votre navigateur.**
+*🇫🇷 [Version française](README.fr.md)*
 
-> Gérez vos tâches GTG depuis n'importe où. Sans compte. Sans cloud tiers. Sans compromis.
+**Getting Things GNOME — in your browser.**
 
----
-
-## ✨ Démonstration
-
-👉 **[Essayer gtgWeb →](https://gtgweb.github.io)**
-
-*Mode démo disponible — aucune configuration requise.*
+> Manage your GTG tasks from anywhere. No account. No third-party cloud. No compromise.
 
 ---
 
-## Le problème
+## The problem
 
-[Getting Things GNOME](https://wiki.gnome.org/Apps/GTG) est l'un des gestionnaires de tâches les plus puissants du logiciel libre. Sous-tâches imbriquées, tags hiérarchiques, dates sémantiques, éditeur note avec parsing inline — GTG a une philosophie et une profondeur que peu d'outils rivalisent.
+[Getting Things GNOME](https://getting-things-gnome.github.io) is one of the most capable task managers in free software. Nested subtasks, hierarchical tags, semantic dates, a note-style editor with inline parsing — GTG has a philosophy and a depth that few tools match.
 
-Mais GTG reste prisonnier du bureau Linux.
+But GTG is locked to the Linux desktop.
 
-Depuis un téléphone, un navigateur au travail, un ordinateur partagé — vos tâches sont inaccessibles. Les alternatives mobiles (Tasks.org, jtx Board) exigent des compromis sur le modèle de données GTG. **Il n'existe aucune interface web moderne, libre et auto-hébergeable pour GTG. Ce vide dure depuis 2013.**
+From a phone, a browser at work, a shared computer — your tasks are out of reach. Mobile alternatives (Tasks.org, jtx Board) force compromises on the GTG data model. **There is no modern, free, self-hostable web interface for GTG. This gap has existed since 2013.**
 
-gtgWeb comble ce vide.
+gtgWeb fills that gap.
 
 ---
 
-## Ce que gtgWeb fait
+## What gtgWeb does
 
 ```
-✓  Interface GTG authentique dans le navigateur
-✓  Connexion directe à votre serveur CalDAV (Nextcloud, Radicale, Baikal...)
-✓  Éditeur note avec parsing inline — @tags, - sous-tâches, exactement comme GTG desktop
-✓  Dates fuzzy — Maintenant, Bientôt, Un jour, Plus tard
-✓  Vue Actionnables — ce que vous pouvez faire maintenant, rien d'autre
-✓  PWA installable — icône sur l'écran d'accueil, fonctionne hors-ligne
-✓  Vos données restent sur votre serveur. Toujours.
+✓  Authentic GTG interface in the browser
+✓  Direct connection to your CalDAV server (Nextcloud, Radicale, Baikal...)
+✓  Note-style editor with inline parsing — @tags, - subtasks, just like GTG desktop
+✓  Continuous saving — no Save button, just like GTG
+✓  Semantic dates — Now, Soon, Someday, or a specific date
+✓  Actionable view — what you can do right now, nothing else
+✓  One task = one URL — history, bookmarks, shareable links
+✓  PIN unlock — no password to retype
+✓  Installable PWA — home screen icon
+✓  Your data stays on your server. Always.
+```
+
+### One task = one URL
+
+Every task has its own address (`#/task/<id>`). The browser's Back button works, a task
+can be bookmarked, opened in a new tab, shared as a link. This is the "wiki of tasks"
+model: something GTG desktop cannot offer, and what gtgWeb adds on top.
+
+### Your edits do not get lost
+
+Typing is saved continuously, with a local draft as a safety net. Network dropped, tab
+closed by accident, battery dead: on reopening, gtgWeb flags the draft and lets you choose
+between your version and the server's. Nothing is ever overwritten without your say-so.
+
+### Your password is never stored in the clear
+
+PIN unlock encrypts your CalDAV password (AES-GCM, key derived from the PIN via PBKDF2)
+and only ever writes the encrypted form to disk. The PIN itself is stored nowhere.
+
+---
+
+## What gtgWeb is not
+
+```
+✗  A cloud service — no account, no central gtgWeb server
+✗  A Tasks.org clone — a GTG web interface, not a generic CalDAV client
+✗  A complex deployment — FTP is enough
 ```
 
 ---
 
-## Ce que gtgWeb n'est pas
+## Install in 10 minutes
 
-```
-✗  Un service cloud — pas de compte, pas de serveur gtgWeb central
-✗  Un clone Tasks.org — une interface web GTG, pas un client CalDAV générique
-✗  Un projet complexe à déployer — FTP suffit
-```
+### Requirements
 
----
+- A CalDAV server (Nextcloud, Radicale, Baikal, or other)
+- Web hosting with PHP 7.4+ and HTTPS
+- An FTP client
 
-## Installation en 10 minutes
-
-### Prérequis
-
-- Un serveur CalDAV (Nextcloud, Radicale, Baikal, ou autre)
-- Un hébergement web avec PHP 7.4+ et HTTPS
-- Un client FTP
-
-### Déploiement
+### Deployment
 
 ```bash
-# 1. Télécharger la dernière version
-#    → Releases GitHub : github.com/[org]/gtgweb/releases
+# 1. Download the latest release
+#    → GitHub Releases: github.com/gtgweb/gtgweb/releases
 
-# 2. Uploader les fichiers sur votre hébergement par FTP
-#    (à la racine ou dans un sous-dossier)
+# 2. Upload the files to your hosting via FTP
+#    (at the root or in a subfolder)
 
-# 3. Créer un sous-domaine (ex: gtg.votredomaine.fr)
-#    et pointer vers le dossier uploadé
+# 3. Create a subdomain (e.g. gtg.yourdomain.tld)
+#    pointing to the uploaded folder
 
-# 4. Ouvrir gtg.votredomaine.fr dans votre navigateur
+# 4. Open gtg.yourdomain.tld in your browser
 
-# 5. Saisir votre URL CalDAV + identifiants
-#    → C'est tout.
+# 5. Enter your CalDAV URL + credentials
+#    → That's it.
 ```
 
-### Configuration CalDAV recommandée
+### Recommended CalDAV setup
 
-Utilisez un **mot de passe d'application** (Nextcloud → Paramètres → Sécurité) plutôt que votre mot de passe principal. Il est révocable à tout moment.
+Use an **application password** (Nextcloud → Settings → Security) instead of your main password. It can be revoked at any time.
 
-### Si votre serveur CalDAV bloque les requêtes cross-origin (CORS)
+### If your CalDAV server blocks cross-origin requests (CORS)
 
-C'est le cas de la plupart des hébergements mutualisés Nextcloud. gtgWeb détecte automatiquement le problème et vous propose de configurer le proxy PHP inclus. **Aucune ligne de commande requise** — le proxy est déjà dans le package, vous le posez par FTP.
+This is the case for most shared-hosting Nextcloud setups. gtgWeb detects the problem automatically and offers to configure the bundled PHP proxy. **No command line required** — the proxy ships in the package, you drop it in via FTP.
 
-→ [Documentation proxy PHP](docs/proxy.md)
-→ [Configuration CORS nginx/Apache](docs/cors.md)
+→ [PHP proxy documentation](docs/proxy.md)
+→ [Installation guide](docs/installation.md) (French)
+→ [Finding your CalDAV URL](docs/caldav-urls.md) (French)
 
 ---
 
 ## Architecture
 
 ```
-Navigateur (gtgWeb PWA)
-    ↕ fetch — même domaine
-proxy.php (optionnel — hébergement PHP)
-    ↕ HTTPS — CalDAV standard
-Votre serveur CalDAV
+Browser (gtgWeb PWA)
+    ↕ fetch — same origin
+proxy.php (optional — PHP hosting)
+    ↕ HTTPS — standard CalDAV
+Your CalDAV server
 ```
 
-**Vanilla JS. Zéro dépendance. Zéro framework. Zéro base de données.**
+**Vanilla JS. Zero dependencies. Zero frameworks. Zero database.**
 
-gtgWeb est du HTML, CSS et JavaScript standard. Pas de `node_modules`. Pas de build step. Vous lisez le code source — vous comprenez ce qu'il fait.
+gtgWeb is plain HTML, CSS and JavaScript. No `node_modules`. No build step. You read the source — you understand what it does.
 
-→ [Architecture détaillée](docs/05-technique.md)
+→ [Detailed architecture](docs/05-technique.md)
 
 ---
 
-## Compatibilité
+## Compatibility
 
-| Client CalDAV | Support |
+gtgWeb speaks GTG's CalDAV dialect: subtasks via `RELATED-TO`, semantic dates via the
+`GTGFUZZY` parameter. Two-way sync is verified against **GTG desktop 0.6 and 0.7**.
+
+| CalDAV server | Support |
 |---|---|
-| Nextcloud | ✅ Testé |
+| Nextcloud | ✅ Tested |
 | Radicale | ✅ Compatible |
 | Baikal | ✅ Compatible |
-| Apple iCloud | 🔵 Non testé |
-| Google Calendar | ❌ Pas de CalDAV VTODO |
+| Apple iCloud | 🔵 Untested |
+| Google Calendar | ❌ No CalDAV VTODO |
 
-| Navigateur | Support |
+| Browser | Support |
 |---|---|
 | Firefox 90+ | ✅ |
 | Chromium / Chrome 90+ | ✅ |
@@ -127,76 +145,79 @@ gtgWeb est du HTML, CSS et JavaScript standard. Pas de `node_modules`. Pas de bu
 
 ---
 
-## Feuille de route
+## Roadmap
 
-### 🟢 v1 — En cours
-- Interface GTG complète (Ouvertes / Actionnables / Fermées)
-- Éditeur note avec parsing inline
-- Dates fuzzy
-- Proxy PHP pour hébergements mutualisés
-- PWA installable et hors-ligne
+### 🟢 v1 — In progress
+- Full GTG interface (Open / Actionable / Closed), GTG-style sorting
+- Note-style editor with inline parsing, header modelled on GTG
+- Continuous saving and local drafts
+- Semantic dates
+- One task = one URL
+- PIN unlock
+- PHP proxy for shared hosting
+- Installable PWA
 
-### 🔵 v2 — Planifié
-- Greffon GTG desktop — synchronise couleurs et icônes des tags
-- Profils multiples (plusieurs serveurs CalDAV)
-- Booker avancé (RDV récurrents, invités)
-- Popup contacts depuis email/téléphone détectés
+### 🔵 v2 — Planned
+- Multiple calendars and sharing between users
+- Reminders (VALARM) and recurrence (RRULE)
+- Full offline mode
+- GTG desktop plugin — syncs tag colors and icons
+- Multiple profiles (several CalDAV servers)
+- Contact popup from detected emails/phone numbers
 
 ### 🟣 v3+ — Vision
-- gtgWeb autonome — se passer de GTG desktop si souhaité
-- Support VJOURNAL (notes)
+- Standalone gtgWeb — usable without GTG desktop if desired
+- VJOURNAL support (notes)
 
 ---
 
-## Contribuer
+## Contributing
 
-gtgWeb est un projet communautaire. Il est né d'un besoin réel et d'une conviction : **les outils de productivité libres méritent une interface web digne de ce nom.**
+gtgWeb is a community project. It was born from a real need and a conviction: **free productivity tools deserve a proper web interface.**
 
-Le code est volontairement simple — Vanilla JS lisible par tout développeur web. Pas besoin de connaître un framework pour contribuer.
+The code is deliberately simple — Vanilla JS readable by any web developer. No framework knowledge needed to contribute.
 
-### Par où commencer
+### Where to start
 
 ```
-docs/          → documentation complète du projet
-js/            → code source JavaScript modulaire
-issues/        → bugs et suggestions
-discussions/   → idées et questions
+docs/          → full project documentation (French, translations welcome)
+js/            → modular JavaScript source
+issues/        → bugs and suggestions
+discussions/   → ideas and questions
 ```
 
-→ [Guide de contribution](CONTRIBUTING.md)
-→ [Vision du projet](docs/01-vision.md)
-→ [Modèle de données](docs/03-modele-donnees.md)
-→ [Cahier des charges fonctionnel](docs/04-fonctionnel.md)
+→ [Contribution guide](CONTRIBUTING.md)
+→ [Project vision](docs/01-vision.md)
+→ [Data model](docs/03-modele-donnees.md)
+→ [Functional specification](docs/04-fonctionnel.md)
 
-**Dépôts :**
-- Code source → [github.com/gtgweb/gtgweb](https://github.com/gtgweb/gtgweb)
-- Démo → [gtgweb.github.io](https://gtgweb.github.io)
+**Repositories:**
+- Source code → [github.com/gtgweb/gtgweb](https://github.com/gtgweb/gtgweb)
+- Website → [gtgweb.github.io](https://gtgweb.github.io)
 
-### Ce dont le projet a besoin
+### What the project needs
 
-- 🧪 **Testeurs** — sur différents serveurs CalDAV et navigateurs
-- 🎨 **Designers** — l'interface GTG-like mérite du soin
-- 🐍 **Développeurs Python** — pour le greffon GTG desktop (v2)
-- 📝 **Documentalistes** — guides utilisateur, traductions
-
----
-
-## Licence
-
-gtgWeb est distribué sous licence **GPL v3**.
-
-Comme GTG desktop. Comme le logiciel libre.
+- 🧪 **Testers** — on different CalDAV servers and browsers
+- 🎨 **Designers** — a GTG-like interface deserves care
+- 🐍 **Python developers** — for the GTG desktop plugin (v2)
+- 📝 **Writers** — user guides, translations
 
 ---
 
-## Remerciements
+## License
 
-- L'équipe [Getting Things GNOME](https://github.com/getting-things-gnome/gtg) pour un outil remarquable
-- La communauté GTD et GTG pour 15 ans de contributions
-- [jaesivsm](https://github.com/jaesivsm) pour le backend CalDAV GTG desktop
+gtgWeb is released under the **GPL v3** license.
+
+Like GTG desktop. Like free software.
 
 ---
 
-*gtgWeb est un projet indépendant, non affilié officiellement au projet GTG.*
+## Acknowledgements
 
-*Initié par [Pentux](https://github.com/pentux-GitHub) · Contributions bienvenues*
+- The [Getting Things GNOME](https://github.com/getting-things-gnome/gtg) team for a remarkable tool
+- The GTD and GTG community for 15 years of contributions
+- [jaesivsm](https://github.com/jaesivsm) for the GTG desktop CalDAV backend
+
+---
+
+*gtgWeb is an independent project, not officially affiliated with the GTG project.*
