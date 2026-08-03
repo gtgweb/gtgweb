@@ -286,29 +286,27 @@ const CalDAV = (() => {
   function _parseMultistatus(xml) {
     const results = [];
     try {
+      // Decoupage prealable en blocs <response> : href, etag et calendar-data
+      // sont extraits A L'INTERIEUR de chaque bloc. L'appariement est
+      // structurel, plus positionnel — une <response> atypique (getetag sans
+      // .ics, propstat 404...) ne peut plus decaler les ETags des autres.
+      const respRe    = /<([\w-]+:)?response[\s>][\s\S]*?<\/\1?response>/gi;
       // Extraction via regex sur le XML brut — textContent du DOMParser
       // normalise les espaces et détruit les sauts de ligne iCal.
-      const calDataRe = /<[^:>]*:?calendar-data[^>]*>([\s\S]*?)<\/[^:>]*:?calendar-data>/gi;
-      const etagRe    = /<[^:>]*:?getetag[^>]*>"?([^"<\s]+)"?<\/[^:>]*:?getetag>/gi;
+      const calDataRe = /<[^:>]*:?calendar-data[^>]*>([\s\S]*?)<\/[^:>]*:?calendar-data>/i;
+      const etagRe    = /<[^:>]*:?getetag[^>]*>"?([^"<\s]+)"?<\/[^:>]*:?getetag>/i;
+      // Href (nom de fichier .ics). Le nom de fichier n'est PAS toujours
+      // l'uid : GTG desktop le nomme differemment.
+      const hrefRe    = /<[^:>]*:?href[^>]*>([^<]+\.ics)<\/[^:>]*:?href>/i;
 
-      // Extraire tous les ETags dans l'ordre
-      const etags = [];
-      let em;
-      while ((em = etagRe.exec(xml)) !== null) {
-        etags.push(em[1].replace(/"/g, ''));
-      }
+      let rm;
+      while ((rm = respRe.exec(xml)) !== null) {
+        const block = rm[0];
 
-      // Href (nom de fichier .ics) dans l'ordre. Le nom de fichier n'est PAS
-      // toujours l'uid : GTG desktop le nomme differemment.
-      const hrefRe = /<[^:>]*:?href[^>]*>([^<]+\.ics)<\/[^:>]*:?href>/gi;
-      const hrefs = [];
-      let hm;
-      while ((hm = hrefRe.exec(xml)) !== null) { hrefs.push(hm[1].trim()); }
+        const cd = block.match(calDataRe);
+        if (!cd) continue;
 
-      let m;
-      let idx = 0;
-      while ((m = calDataRe.exec(xml)) !== null) {
-        let ical = m[1]
+        let ical = cd[1]
           .replace(/&amp;/g,  '&')
           .replace(/&lt;/g,   '<')
           .replace(/&gt;/g,   '>')
@@ -316,18 +314,20 @@ const CalDAV = (() => {
           .replace(/&#13;/g,  '\r')
           .trim();
 
-        if (!ical.includes('VTODO')) { idx++; continue; }
+        if (!ical.includes('VTODO')) continue;
 
         const uidMatch = ical.match(/^UID:(.+)$/m);
-        if (!uidMatch) { idx++; continue; }
+        if (!uidMatch) continue;
+
+        const et = block.match(etagRe);
+        const hr = block.match(hrefRe);
 
         results.push({
           uid:  uidMatch[1].trim(),
-          etag: etags[idx] || '',
-          href: hrefs[idx] || '',
+          etag: et ? et[1].replace(/"/g, '') : '',
+          href: hr ? hr[1].trim() : '',
           ical,
         });
-        idx++;
       }
     } catch (e) {
       console.error('gtgWeb CalDAV : erreur parsing XML', e);
