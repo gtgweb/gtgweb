@@ -44,6 +44,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     App.calendarName = creds.calendarName || '';
     CalDAV.init(creds.url, creds.username, creds.password, creds.calendarSegment || '');
     await loadAndRender();
+  } else if (Storage.hasCredentials() && PinLock.isEnabled()) {
+    // Coffre PIN present : le code devient le chemin normal, le mot de passe
+    // reste accessible en repli depuis cet ecran.
+    UI.renderPinUnlock(Storage.loadCredentials());
   } else if (Storage.hasCredentials()) {
     // Identifiants memorises SANS mot de passe (nouvelle session) :
     // formulaire pre-rempli, l'utilisateur retape juste son mot de passe.
@@ -160,6 +164,77 @@ async function handleAction(action, payload) {
   switch (action) {
 
     // ── Étape 1 : saisie credentials ───────────────────────────────────────
+    // ── Deverrouillage par code PIN ─────────────────────────────────────────
+    case 'pinUnlock': {
+      const { pin } = payload;
+      const base = Storage.loadCredentials();
+      if (!base) { UI.renderLogin(); break; }
+
+      UI.setPinBusy(true);
+      const res = await PinLock.unlock(pin);
+      UI.setPinBusy(false);
+
+      if (!res.ok) {
+        if (res.destroyed) {
+          // Trop d'essais : le coffre a ete detruit. Rien d'autre n'est perdu,
+          // il suffit de retaper le mot de passe (et de recreer un code apres).
+          UI.renderLogin('Trop de tentatives. Le code a été effacé, '
+                       + 'reconnectez-vous avec votre mot de passe.', base);
+        } else {
+          UI.renderPinUnlock(base, `Code incorrect. ${res.attemptsLeft} tentative(s) restante(s).`);
+        }
+        break;
+      }
+
+      // Le mot de passe repart en memoire de session, comme apres un login.
+      Storage.saveCredentials({
+        url: base.url, username: base.username, password: res.password,
+        calendarName: base.calendarName, calendarSegment: base.calendarSegment,
+      }, Storage.isPersistent());
+      App.calendarName = base.calendarName || '';
+      CalDAV.init(base.url, base.username, res.password, base.calendarSegment || '');
+      await loadAndRender();
+      break;
+    }
+
+    // Repli explicite : revenir au mot de passe sans toucher au coffre.
+    case 'pinUsePassword': {
+      UI.renderLogin(null, Storage.loadCredentials());
+      break;
+    }
+
+    // Creation du code depuis les Parametres.
+    case 'pinEnable': {
+      const { pin, pin2 } = payload;
+      const invalid = PinLock.validatePin(pin);
+      if (invalid)        { UI.setPinSettingsMessage(invalid, 'error'); break; }
+      if (pin !== pin2)   { UI.setPinSettingsMessage('Les deux codes diffèrent.', 'error'); break; }
+
+      const creds = Storage.loadCredentials();
+      if (!creds || !creds.password) {
+        UI.setPinSettingsMessage(
+          'Mot de passe indisponible dans cette session. Reconnectez-vous, puis créez le code.',
+          'error');
+        break;
+      }
+      const ok = await PinLock.enable(creds.password, pin);
+      // Rafraichir AVANT d'ecrire le message : refreshPinSettings reconstruit
+      // le bloc et effacerait un message pose auparavant.
+      UI.refreshPinSettings();
+      UI.setPinSettingsMessage(
+        ok ? 'Code enregistré. Il déverrouillera vos prochaines sessions.'
+           : 'Impossible d\'enregistrer le code sur cet appareil.',
+        ok ? 'success' : 'error');
+      break;
+    }
+
+    case 'pinDisable': {
+      PinLock.disable();
+      UI.refreshPinSettings();
+      UI.setPinSettingsMessage('Code supprimé.', 'success');
+      break;
+    }
+
     case 'login': {
       const { url, username, password } = payload;
       if (!url || !username || !password) {
@@ -228,6 +303,9 @@ async function handleAction(action, payload) {
     }
 
     case 'logout': {
+      // Le coffre part avec les identifiants : un code qui survivrait a une
+      // deconnexion rouvrirait un compte dont on vient de sortir.
+      PinLock.disable();
       Storage.clearCredentials();
       App.pendingTask  = null;
       App.calendarName = '';

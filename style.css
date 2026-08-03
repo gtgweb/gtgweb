@@ -637,6 +637,66 @@ a { text-decoration: none; color: inherit; }
   color: var(--text-muted);
 }
 
+/* ── Deverrouillage par code PIN ─────────────────────────────────────────── */
+
+.pin-box { text-align: center; }
+
+.pin-display {
+  min-height: 28px;
+  margin: var(--space-md) 0 var(--space-sm);
+  font-size: 22px;
+  letter-spacing: 6px;
+  color: var(--text);
+}
+
+/* Champ reel : invisible mais focusable (le clavier systeme reste disponible
+   sur mobile, et la saisie physique fonctionne sur ordinateur). */
+.pin-input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.pin-pad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-sm);
+  max-width: 280px;
+  margin: 0 auto var(--space-md);
+}
+.pin-pad--busy { opacity: .5; pointer-events: none; }
+
+.pin-key {
+  padding: 14px 0;
+  font-size: 20px;
+  color: var(--text);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.pin-key:active { background: var(--bg-tertiary); }
+.pin-key--ok { color: #fff; background: var(--accent); border-color: var(--accent); }
+
+.pin-fallback { margin-top: var(--space-sm); }
+
+.pin-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: var(--space-sm);
+}
+
+.pin-message {
+  margin-top: var(--space-sm);
+  font-size: 12px;
+  min-height: 16px;
+}
+.pin-message--error   { color: var(--red); }
+.pin-message--success { color: var(--green); }
+
 /* Bandeau au-dessus de la liste : brouillons non synchronises, une ligne par
    tache. Reste tant que le brouillon existe. */
 .drafts-banner:empty { display: none; }

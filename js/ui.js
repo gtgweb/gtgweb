@@ -32,6 +32,141 @@ const UI = (() => {
     return u.origin + path + 'proxy.php';
   }
 
+  // ── Deverrouillage par code PIN ───────────────────────────────────────────
+
+  /**
+   * Ecran de deverrouillage. Le code est le chemin normal ; le mot de passe
+   * reste accessible en repli, discretement.
+   */
+  function renderPinUnlock(creds, errorMessage = null) {
+    const app = document.getElementById('app');
+    app.className = 'screen-login';
+    app.innerHTML = `
+      <div class="login-box pin-box">
+        <div class="login-logo"><span class="logo-gtg">gtg</span><span class="logo-web">Web</span></div>
+        <p class="login-tagline">${_escape((creds && creds.username) || '')}</p>
+
+        ${errorMessage ? `<div class="login-error">${_escape(errorMessage)}</div>` : ''}
+
+        <div class="pin-display" id="pin-display" aria-live="polite"></div>
+
+        <input type="password" inputmode="numeric" autocomplete="off"
+               class="pin-input" id="pin-input" maxlength="12"
+               aria-label="Code de déverrouillage" />
+
+        <div class="pin-pad" id="pin-pad">
+          ${[1,2,3,4,5,6,7,8,9].map(n => `<button class="pin-key" data-key="${n}">${n}</button>`).join('')}
+          <button class="pin-key pin-key--wide" data-key="back" aria-label="Effacer">⌫</button>
+          <button class="pin-key" data-key="0">0</button>
+          <button class="pin-key pin-key--ok" data-key="ok" aria-label="Valider">✓</button>
+        </div>
+
+        <button class="btn btn--ghost btn--small pin-fallback" id="btn-pin-password">
+          Utiliser le mot de passe
+        </button>
+      </div>
+    `;
+
+    const input   = document.getElementById('pin-input');
+    const display = document.getElementById('pin-display');
+
+    const paint = () => {
+      display.textContent = '•'.repeat(input.value.length);
+    };
+
+    const submit = () => {
+      if (!input.value) return;
+      _onAction('pinUnlock', { pin: input.value });
+    };
+
+    input.addEventListener('input', () => {
+      input.value = input.value.replace(/\D/g, '');
+      paint();
+    });
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+
+    document.getElementById('pin-pad').addEventListener('click', e => {
+      const btn = e.target.closest('.pin-key');
+      if (!btn) return;
+      const k = btn.dataset.key;
+      if (k === 'back')      input.value = input.value.slice(0, -1);
+      else if (k === 'ok')   { submit(); return; }
+      else if (input.value.length < 12) input.value += k;
+      paint();
+      input.focus();
+    });
+
+    document.getElementById('btn-pin-password').addEventListener('click', () =>
+      _onAction('pinUsePassword', {}));
+
+    input.focus();
+  }
+
+  /** Verrouille l'ecran pendant la derivation de cle (quelques centaines de ms). */
+  function setPinBusy(busy) {
+    const pad   = document.getElementById('pin-pad');
+    const input = document.getElementById('pin-input');
+    if (pad)   pad.classList.toggle('pin-pad--busy', !!busy);
+    if (input) input.disabled = !!busy;
+    const display = document.getElementById('pin-display');
+    if (display && busy) display.textContent = 'Déverrouillage…';
+  }
+
+  /**
+   * Section « Code de déverrouillage » des Parametres. Trois etats : non
+   * supporte, code actif (proposition de suppression), pas de code (creation).
+   */
+  function refreshPinSettings() {
+    const box = document.getElementById('pin-settings');
+    if (!box) return;
+
+    if (!PinLock.isSupported()) {
+      box.innerHTML = `<p class="pin-hint">Indisponible sur cet appareil
+        (le chiffrement du navigateur exige une connexion HTTPS).</p>`;
+      return;
+    }
+
+    if (PinLock.isEnabled()) {
+      box.innerHTML = `
+        <p class="pin-hint">Un code est actif sur cet appareil. Il évite de
+        retaper le mot de passe à chaque session.</p>
+        <button class="btn btn--danger btn--small" id="btn-pin-disable">Supprimer le code</button>
+        <div class="pin-message" id="pin-message"></div>`;
+      document.getElementById('btn-pin-disable').addEventListener('click', () =>
+        _onAction('pinDisable', {}));
+      return;
+    }
+
+    box.innerHTML = `
+      <p class="pin-hint">Votre mot de passe sera chiffré par ce code et ne sera
+      jamais écrit en clair. Le code lui-même n'est stocké nulle part.
+      ${PinLock.RECOMMENDED_PIN_LENGTH} chiffres recommandés ;
+      ${PinLock.MAX_ATTEMPTS} essais erronés effacent le code.</p>
+      <div class="form-group">
+        <label for="set-pin1">Code</label>
+        <input type="password" inputmode="numeric" id="set-pin1" autocomplete="off" maxlength="12" />
+      </div>
+      <div class="form-group">
+        <label for="set-pin2">Confirmation</label>
+        <input type="password" inputmode="numeric" id="set-pin2" autocomplete="off" maxlength="12" />
+      </div>
+      <button class="btn btn--primary btn--small" id="btn-pin-enable">Enregistrer le code</button>
+      <div class="pin-message" id="pin-message"></div>`;
+
+    document.getElementById('btn-pin-enable').addEventListener('click', () =>
+      _onAction('pinEnable', {
+        pin:  document.getElementById('set-pin1').value,
+        pin2: document.getElementById('set-pin2').value,
+      }));
+  }
+
+  function setPinSettingsMessage(text, kind = 'info') {
+    const el = document.getElementById('pin-message');
+    if (!el) return;
+    el.className = `pin-message pin-message--${kind}`;
+    el.textContent = text;
+  }
+
   function renderLogin(errorMessage = null, prefill = null) {
     const app = document.getElementById('app');
     app.innerHTML = '';
@@ -187,6 +322,9 @@ const UI = (() => {
             <label for="set-excerpt">Aperçu note (100 premiers caractères)</label>
           </div>
 
+          <div class="settings-section-title">Code de déverrouillage</div>
+          <div class="pin-settings" id="pin-settings"></div>
+
           <div class="settings-section-title">Info proxy</div>
           <div class="form-group">
             <label>URL configurée</label>
@@ -203,6 +341,7 @@ const UI = (() => {
     `;
 
     overlay.classList.remove('hidden');
+    refreshPinSettings();
 
     // Highlight thème sélectionné en temps réel
     overlay.querySelectorAll('input[name="theme"]').forEach(radio => {
@@ -935,6 +1074,7 @@ const UI = (() => {
     setSyncState, toggleExpanded, toggleAll, applyTheme,
     renderLoading, renderLoadError,
     hideDraftNotice, applyDraftToEditor, renderDraftsBanner,
+    renderPinUnlock, setPinBusy, refreshPinSettings, setPinSettingsMessage,
   };
 
 })();
