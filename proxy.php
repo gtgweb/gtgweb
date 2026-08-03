@@ -139,10 +139,23 @@ function resolve_calendar_root($server, $auth) {
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
 
-$origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '*';
+$origin  = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '';
 $allowed = isset($ALLOWED_ORIGIN) ? $ALLOWED_ORIGIN : '*';
 
-header('Access-Control-Allow-Origin: ' . $allowed);
+// Une origine explicite est renvoyee telle quelle SEULEMENT si elle correspond
+// a celle configuree. '*' reste possible pour les tests, mais alors on le dit :
+// n'importe quel site peut appeler ce proxy.
+if ($allowed === '*') {
+    header('Access-Control-Allow-Origin: *');
+    header('X-Gtgweb-Warning: ALLOWED_ORIGIN vaut *, a restreindre en production');
+} elseif ($origin !== '' && $origin === $allowed) {
+    header('Access-Control-Allow-Origin: ' . $allowed);
+    header('Vary: Origin');
+} else {
+    // Origine inconnue : pas d'en-tete CORS, le navigateur bloquera.
+    header('Vary: Origin');
+}
+
 header('Access-Control-Allow-Methods: GET, PUT, DELETE, REPORT, PROPFIND, PROPPATCH, MKCALENDAR, OPTIONS');
 header('Access-Control-Allow-Headers: Authorization, Content-Type, Depth, If-Match, If-None-Match, Prefer');
 header('Access-Control-Expose-Headers: ETag, DAV');
@@ -208,6 +221,51 @@ if (isset($_GET['action']) && $_GET['action'] === 'calendars') {
 
 // ── Proxy transparent ─────────────────────────────────────────────────────────
 
+// Methodes autorisees. Sans cette borne, n'importe quel verbe HTTP serait
+// relaye tel quel vers le serveur Nextcloud.
+$ALLOWED_METHODS = [
+    'GET', 'PUT', 'DELETE', 'REPORT', 'PROPFIND', 'PROPPATCH', 'MKCALENDAR', 'OPTIONS', 'HEAD',
+];
+$method = isset($_SERVER['REQUEST_METHOD']) ? strtoupper($_SERVER['REQUEST_METHOD']) : '';
+if (!in_array($method, $ALLOWED_METHODS, true)) {
+    http_response_code(405);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo 'Methode non autorisee.';
+    exit;
+}
+
+/**
+ * Valide le chemin demande avant de le coller a la racine calendriers.
+ *
+ * Sans cette borne, un chemin contenant « .. » permet de remonter hors du
+ * dossier calendriers du compte et de faire de gtgWeb un proxy WebDAV
+ * generaliste vers le serveur Nextcloud. L'authentification protege toujours
+ * les donnees d'autrui, mais rien ne justifie d'exposer cette surface.
+ *
+ * @return bool
+ */
+function path_is_safe($path) {
+    if ($path === '') return true;
+    if ($path[0] !== '/') return false;                 // doit rester relatif a la racine
+
+    // Verifier AUSSI la forme decodee : « %2e%2e » est une remontee que le
+    // serveur decodera, et qui passerait un simple test sur la forme brute.
+    // Double decodage par prudence (certains intermediaires decodent une fois).
+    $decoded = rawurldecode($path);
+    $decoded2 = rawurldecode($decoded);
+    if (strpos($path, '..') !== false) return false;    // aucune remontee
+    if (strpos($decoded, '..') !== false) return false;
+    if (strpos($decoded2, '..') !== false) return false;
+    if (strpos($decoded, '\\') !== false) return false;
+    if (preg_match('/[\x00-\x1f\x7f]/', $decoded)) return false;
+    if (strpos($path, '\\') !== false) return false;      // pas d'anti-slash
+    if (strpos($path, "\0") !== false) return false;    // pas d'octet nul
+    if (preg_match('/[\x00-\x1f\x7f]/', $path)) return false;  // pas de controle
+    if (strlen($path) > 512) return false;              // longueur raisonnable
+    // Jeu de caracteres attendu pour un chemin CalDAV (segments et .ics).
+    return (bool) preg_match('#^[A-Za-z0-9/._~%@:+-]*$#', $path);
+}
+
 // Construire l'URL cible
 $path = '';
 if (isset($_SERVER['PATH_INFO'])) {
@@ -222,19 +280,36 @@ if (isset($_SERVER['PATH_INFO'])) {
     }
 }
 
+if (!path_is_safe($path)) {
+    http_response_code(400);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo 'Chemin invalide.';
+    exit;
+}
+
 $target_url = rtrim($CALDAV_URL, '/') . $path;
 
-// Transmettre les headers de la requête
+// Transmettre les headers de la requete — LISTE BLANCHE.
+// Auparavant tout en-tete HTTP_* etait recopie vers Nextcloud, Cookie compris :
+// une liste noire laisse forcement passer ce qu'on n'a pas prevu. Seuls les
+// en-tetes que CalDAV utilise reellement sont relayes.
+$FORWARD_HEADERS = [
+    'DEPTH', 'IF-MATCH', 'IF-NONE-MATCH', 'IF', 'PREFER',
+    'CONTENT-TYPE', 'ACCEPT', 'OVERWRITE', 'DESTINATION', 'TIMEOUT',
+];
 $headers = [];
 foreach ($_SERVER as $key => $value) {
     if (substr($key, 0, 5) === 'HTTP_') {
         $name = str_replace('_', '-', substr($key, 5));
-        if (!in_array($name, ['HOST', 'ORIGIN', 'REFERER'])) {
-            $headers[] = $name . ': ' . $value;
+        if (in_array($name, $FORWARD_HEADERS, true)) {
+            // Neutraliser toute tentative d'injection d'en-tete (CRLF).
+            $clean = str_replace(["\r", "\n"], '', $value);
+            $headers[] = $name . ': ' . $clean;
         }
     }
-    if ($key === 'CONTENT_TYPE')   $headers[] = 'Content-Type: ' . $value;
-    if ($key === 'CONTENT_LENGTH') $headers[] = 'Content-Length: ' . $value;
+    if ($key === 'CONTENT_TYPE') {
+        $headers[] = 'Content-Type: ' . str_replace(["\r", "\n"], '', $value);
+    }
 }
 
 // Injecter l'en-tete d'authentification reconstruit ($AUTH_HEADER).
@@ -248,11 +323,20 @@ if ($AUTH_HEADER !== '') {
     $headers[] = 'Authorization: ' . $AUTH_HEADER;
 }
 
-$body = file_get_contents('php://input');
+// Borne de taille : un VTODO fait quelques kilo-octets. Au-dela, on refuse
+// plutot que de relayer un corps arbitraire vers le serveur.
+$MAX_BODY = 1048576; // 1 Mio
+$body = file_get_contents('php://input', false, null, 0, $MAX_BODY + 1);
+if ($body !== false && strlen($body) > $MAX_BODY) {
+    http_response_code(413);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo 'Corps de requete trop volumineux.';
+    exit;
+}
 
 $ch = curl_init($target_url);
 curl_setopt_array($ch, [
-    CURLOPT_CUSTOMREQUEST  => $_SERVER['REQUEST_METHOD'],
+    CURLOPT_CUSTOMREQUEST  => $method,
     CURLOPT_POSTFIELDS     => $body ?: null,
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_HEADER         => true,

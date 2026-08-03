@@ -22,6 +22,10 @@
 $CALDAV_SERVER = 'https://nuage.example.org';
 
 // --- Origine autorisee pour les requetes CORS ---
-// En production : l'URL exacte de votre instance gtgWeb,
-// ex : 'https://gtg.votredomaine.fr'. Laissez '*' uniquement pour les tests.
-$ALLOWED_ORIGIN = '*';
+// En production : l'URL exacte de votre instance gtgWeb, schema compris et
+// SANS slash final, ex : 'https://gtg.votredomaine.fr'. Elle doit correspondre
+// exactement a l'en-tete Origin envoye par le navigateur.
+//
+// '*' autorise n'importe quel site a appeler ce proxy : a reserver aux tests.
+// Dans ce cas le proxy renvoie un en-tete X-Gtgweb-Warning pour le rappeler.
+$ALLOWED_ORIGIN = 'https://gtg.votredomaine.fr';
