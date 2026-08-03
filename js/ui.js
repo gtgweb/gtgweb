@@ -167,6 +167,14 @@ const UI = (() => {
     el.textContent = text;
   }
 
+  // Icones symboliques facon Adwaita : trace unique, currentColor, 16x16.
+  // Equivalent de user-bookmarks-symbolic (GTG 0.7, task_editor.ui:65).
+  const ICON_BOOKMARK = `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"
+    fill="none" stroke="currentColor" stroke-width="1.5"
+    stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 2h8a1 1 0 0 1 1 1v11l-5-3.5L3 14V3a1 1 0 0 1 1-1z"/>
+  </svg>`;
+
   function renderLogin(errorMessage = null, prefill = null) {
     const app = document.getElementById('app');
     app.innerHTML = '';
@@ -739,6 +747,21 @@ const UI = (() => {
           </span>
         </div>
 
+        <!-- Barre d'actions de l'editeur, calquee sur GTG : tache parente,
+             sous-tache, marque-page (tags), recurrence. -->
+        <div class="editor-toolbar">
+          <div class="editor-tools">
+            <!-- Icones calquees sur GTG 0.7 (task_editor.ui) : symboliques
+                 Adwaita, monochromes, heritant de la couleur du texte.
+                 user-bookmarks-symbolic pour les etiquettes. -->
+            <button class="btn btn--icon tool-btn" id="btn-bookmark" title="Ajouter une étiquette"
+                    aria-label="Ajouter une étiquette" aria-haspopup="true" aria-expanded="false">
+              ${ICON_BOOKMARK}
+            </button>
+            <div class="tag-popup hidden" id="tag-popup" role="menu"></div>
+          </div>
+        </div>
+
         <div class="editor-dates">
           <div class="date-field">
             <label>Commence le</label>
@@ -841,6 +864,25 @@ const UI = (() => {
     document.getElementById('btn-save-editor').addEventListener('click', () =>
       _onAction('saveAndClose', {}));
 
+    // Marque-page : liste des etiquettes existantes, insertion dans le texte.
+    const bmBtn = document.getElementById('btn-bookmark');
+    if (bmBtn) {
+      bmBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const popup = document.getElementById('tag-popup');
+        if (!popup) return;
+        if (popup.classList.contains('hidden')) {
+          _fillTagPopup(popup, task);
+          popup.classList.remove('hidden');
+          bmBtn.setAttribute('aria-expanded', 'true');
+        } else {
+          _closeTagPopup();
+        }
+      });
+      document.addEventListener('click', _closeTagPopup);
+      document.addEventListener('keydown', _tagPopupKeydown);
+    }
+
     // Brouillon local detecte a l'ouverture : bandeau d'arbitrage.
     const draft = (window.App && window.App.pendingDraft) || null;
     if (draft) {
@@ -894,6 +936,74 @@ const UI = (() => {
         }
       });
     }
+  }
+
+  // ── Marque-page : etiquettes existantes ───────────────────────────────────
+
+  /**
+   * Remplit le menu avec les etiquettes deja utilisees dans les taches
+   * ouvertes, celles que porte deja la tache etant marquees et inertes.
+   * Un champ permet aussi d'en creer une nouvelle, comme dans GTG.
+   */
+  function _fillTagPopup(popup, task) {
+    const all = (window.App && window.App.tagList) || [];
+    const own = new Set((task.tags || []).map(t => String(t).replace(/^@/, '').toLowerCase()));
+
+    const items = all.map(({ tag, count }) => {
+      const has = own.has(String(tag).toLowerCase());
+      return `
+        <button class="tag-popup-item${has ? ' tag-popup-item--has' : ''}"
+                data-tag="${_escape(tag)}" role="menuitem" ${has ? 'disabled' : ''}>
+          <span class="tag-dot" style="background:${Storage.tagColor(tag)}"></span>
+          <span class="tag-popup-name">@${_escape(tag)}</span>
+          <span class="tag-popup-count">${count}</span>
+        </button>`;
+    }).join('');
+
+    popup.innerHTML = `
+      ${items || '<div class="tag-popup-empty">Aucune étiquette pour l\'instant.</div>'}
+      <div class="tag-popup-new">
+        <input type="text" id="tag-popup-input" placeholder="Nouvelle étiquette…"
+               aria-label="Nouvelle étiquette" />
+      </div>`;
+
+    popup.querySelectorAll('.tag-popup-item').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _applyTag(btn.dataset.tag);
+      });
+    });
+
+    const input = document.getElementById('tag-popup-input');
+    if (input) {
+      input.addEventListener('click', e => e.stopPropagation());
+      input.addEventListener('keydown', e => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const v = input.value.replace(/^@/, '').trim();
+        if (v) _applyTag(v);
+      });
+      input.focus();
+    }
+  }
+
+  /** Insere l'etiquette dans le champ ; le parsing habituel fait le reste. */
+  function _applyTag(tag) {
+    const rich = window.App && window.App.richField;
+    _closeTagPopup();
+    if (!rich || typeof rich.addTag !== 'function') return;
+    rich.addTag(tag);
+  }
+
+  function _closeTagPopup() {
+    const popup = document.getElementById('tag-popup');
+    const btn   = document.getElementById('btn-bookmark');
+    if (popup) popup.classList.add('hidden');
+    if (btn)   btn.setAttribute('aria-expanded', 'false');
+  }
+
+  function _tagPopupKeydown(e) {
+    if (e.key === 'Escape') _closeTagPopup();
   }
 
   // ── Brouillon local ───────────────────────────────────────────────────────
@@ -991,7 +1101,10 @@ const UI = (() => {
     // Les ecouteurs globaux du menu ne doivent pas survivre a l'editeur.
     document.removeEventListener('click', _closeEditorMenu);
     document.removeEventListener('keydown', _editorMenuKeydown);
+    document.removeEventListener('click', _closeTagPopup);
+    document.removeEventListener('keydown', _tagPopupKeydown);
     _closeEditorMenu();
+    _closeTagPopup();
   }
 
   function _renderTokens(container, tokens) {

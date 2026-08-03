@@ -320,6 +320,32 @@ const RichField = (function () {
         if ((body || '') === '') lines.length = 1;
         renderAll(lines.length ? lines : ['']);
       },
+      // API : ajouter un @tag au texte, facon GTG (les tags vivent dans le
+      // corps, sur la ligne qui suit le titre). Sans effet si deja present.
+      // Declenche par un clic, donc hors composition : re-rendre est sur ici.
+      addTag(tag) {
+        const clean = String(tag || '').replace(/^@/, '').trim();
+        if (!clean) return false;
+
+        const lines = getLines(el);
+        const re = new RegExp('(?<![a-zA-Z0-9._%+\\-])@' + clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+        if (lines.some(l => re.test(l))) return false;   // deja porte par la tache
+
+        // La ligne de tags est la premiere ligne du corps si elle commence
+        // deja par un @tag ; sinon on en cree une juste apres le titre.
+        const TAG_LINE = /^\s*@[\wÀ-ÿ][\wÀ-ÿ\-]*/;
+        if (lines.length > 1 && TAG_LINE.test(lines[1])) {
+          lines[1] = lines[1].replace(/\s*$/, '') + ' @' + clean;
+        } else {
+          lines.splice(1, 0, '@' + clean);
+        }
+
+        renderAll(lines);
+        placeCaret(1, lines[1].length);
+        if (onChange) onChange(lines);
+        return true;
+      },
+
       // API : initialiser depuis titre + corps + sous-taches (etape A, affichage).
       setContent(title, body, subtasks) {
         _subtasks = subtasks || [];

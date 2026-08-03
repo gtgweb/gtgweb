@@ -15,6 +15,7 @@ const App = {
   pendingTask:  null,
   pendingDraft: null,   // brouillon local detecte a l'ouverture, en attente d'arbitrage
   drafts:       [],     // brouillons non synchronises, signales au-dessus de la liste
+  tagList:      [],     // etiquettes existantes, proposees par le marque-page
   syncing:      new Set(),  // uid des taches dont le PUT est en vol
   calendarName: '',   // displayname du calendrier actif (ex: 'gtg')
 
@@ -266,6 +267,9 @@ function renderCurrentView() {
   const openTasks = Tree.filterByView(App.all, App.index, 'open');
   const tagList   = Tree.buildTagList(openTasks);
   const untagged  = Tree.countUntagged(openTasks);
+  // Conservee pour le marque-page de l'editeur, qui propose les etiquettes
+  // deja utilisees plutot que d'obliger a les retaper.
+  App.tagList = tagList;
 
   UI.renderMain(roots, App.index, tagList, untagged, counts);
 }
