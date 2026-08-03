@@ -577,8 +577,12 @@ const UI = (() => {
     li.dataset.uid = task.uid;
     li.style.setProperty('--depth', depth);
 
-    const row = document.createElement('div');
+    // Vrai lien plutot qu'un div : c'est ce qui donne gratuitement le
+    // Ctrl+clic, le clic-molette, « ouvrir dans un nouvel onglet » et
+    // « copier l'adresse du lien ». Fondation du modele wiki de taches.
+    const row = document.createElement('a');
     row.className = 'task-row';
+    row.href = '#/task/' + encodeURIComponent(task.uid);
 
     const chevron = document.createElement('button');
     chevron.className = 'task-chevron' + (hasChildren ? '' : ' task-chevron--leaf');
@@ -652,7 +656,11 @@ const UI = (() => {
     });
 
     row.addEventListener('click', e => {
-      if (e.target === checkbox || e.target === chevron) return;
+      if (e.target === checkbox || e.target === chevron) { e.preventDefault(); return; }
+      // Laisser le navigateur faire son travail quand l'operateur demande un
+      // nouvel onglet ou une nouvelle fenetre.
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+      e.preventDefault();
       _onAction('openTask', { uid: task.uid, task });
     });
 
@@ -971,6 +979,12 @@ const UI = (() => {
     if (e.key === 'Escape') _closeEditorMenu();
   }
 
+  /** L'editeur est-il actuellement affiche ? */
+  function isEditorOpen() {
+    const panel = document.getElementById('editor-panel');
+    return !!panel && !panel.classList.contains('hidden');
+  }
+
   function closeEditor() {
     const panel = document.getElementById('editor-panel');
     if (panel) panel.classList.add('hidden');
@@ -1075,6 +1089,7 @@ const UI = (() => {
     renderLoading, renderLoadError,
     hideDraftNotice, applyDraftToEditor, renderDraftsBanner,
     renderPinUnlock, setPinBusy, refreshPinSettings, setPinSettingsMessage,
+    isEditorOpen,
   };
 
 })();

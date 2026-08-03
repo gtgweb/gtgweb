@@ -71,6 +71,9 @@ async function loadAndRender() {
       console.warn(`gtgWeb : ${orphans.length} tâche(s) orpheline(s)`);
     }
     renderCurrentView();
+    // L'index est desormais peuple : une adresse #/task/<uid> presente des le
+    // chargement (lien partage, favori, rechargement) peut enfin s'ouvrir.
+    _applyRoute();
     // Signaler discretement les taches illisibles ecartees au parsing (sans
     // trace jusqu'ici) : de la donnee invisible est pire qu'une erreur visible.
     const ignored = items.length - App.all.length;
@@ -103,6 +106,114 @@ function _refreshLocal(task) {
   App.index = index;
   renderCurrentView();
 }
+
+// ── Routage par URL ───────────────────────────────────────────────────────────
+// Fondation du modele « wiki de taches » : chaque tache a une adresse, et
+// l'URL est la source de verite. Ouvrir une tache = changer d'URL ; c'est le
+// routeur qui ouvre l'editeur, jamais l'inverse. On recupere ainsi gratuitement
+// tout le natif du navigateur : Precedent/Suivant, historique, favoris,
+// ouverture dans un nouvel onglet, partage du lien.
+//
+// Choix du hash (#/task/<uid>) plutot que l'History API : aucune reecriture
+// serveur necessaire, donc compatible hebergement mutualise et depot FTP.
+// Le passage aux URL sans diese pourra se faire plus tard sans rien changer
+// a cette architecture.
+
+const ROUTE_TASK = /^#\/task\/(.+)$/;
+const ROUTE_NEW  = '#/new';
+
+/** Demande une navigation. Si l'URL ne change pas, on applique la route quand meme. */
+function _go(hash) {
+  if (location.hash === hash) _applyRoute();
+  else location.hash = hash;
+}
+
+/** Lit l'URL courante et met l'interface en accord avec elle. */
+function _applyRoute() {
+  const hash = location.hash || '#/';
+
+  if (hash === ROUTE_NEW) {
+    _openNewTask();
+    return;
+  }
+
+  const m = hash.match(ROUTE_TASK);
+  if (m) {
+    _openTaskByUid(decodeURIComponent(m[1]));
+    return;
+  }
+
+  // Toute autre adresse ramene a la liste.
+  _closeEditorRoute();
+}
+
+function _openTaskByUid(uid) {
+  // Editeur deja ouvert sur cette meme tache : ne rien redessiner. Un
+  // re-rendu ici ecraserait la saisie en cours (le routeur est rejoue apres
+  // chaque rechargement de liste).
+  if (App.pendingTask && App.pendingTask.uid === uid && UI.isEditorOpen()) return;
+
+  // Tache deja en cours d'edition (cas d'un brouillon orphelin, absent de l'index).
+  if (App.pendingTask && App.pendingTask.uid === uid) {
+    UI.renderEditor(App.pendingTask);
+    _setDocumentTitle(App.pendingTask.title);
+    return;
+  }
+
+  const task = App.index.get(uid);
+  if (!task) {
+    // Adresse inconnue (tache supprimee, lien perime) : retour a la liste
+    // sans message d'erreur, l'URL corrigee remplace l'entree d'historique.
+    location.replace('#/');
+    return;
+  }
+
+  App.pendingTask = { ...task };
+  // Brouillon local non confirme par le serveur : on le signale sans rien
+  // decider a la place de l'operateur.
+  const draft = _draftLoad(task);
+  App.pendingDraft = _draftDiffers(draft, task) ? draft : null;
+  if (!App.pendingDraft) _draftClear(task);
+  // Ouvrir une tache ne la sauvegarde pas : on part d'un compteur neuf
+  // (GTG fait de meme, cf. le garde-fou get_editable() de light_save).
+  App.autosave = { lastSave: Date.now(), pending: false, dirty: false };
+  UI.renderEditor(task);
+  _setDocumentTitle(task.title);
+}
+
+function _openNewTask() {
+  // Deja en train de saisir une tache neuve : ne pas en creer une seconde
+  // (un rechargement sur #/new ne doit pas empiler les brouillons vides).
+  if (App.pendingTask && !App.pendingTask.raw) {
+    if (!UI.isEditorOpen()) UI.renderEditor(App.pendingTask);
+    return;
+  }
+  const uid  = Builder.generateUID();
+  const task = {
+    uid, title: '', status: 'NEEDS-ACTION', description: '',
+    tags: [], due: null, start: null, fuzzy: null,
+    children: [], parent: null, sequence: 0, etag: '', raw: '',
+  };
+  App.pendingTask  = { ...task };
+  App.pendingDraft = null;
+  App.autosave = { lastSave: Date.now(), pending: false, dirty: false };
+  UI.renderEditor(task);
+  _setDocumentTitle('Nouvelle tâche');
+}
+
+function _closeEditorRoute() {
+  App.pendingTask  = null;
+  App.pendingDraft = null;
+  UI.closeEditor();
+  _setDocumentTitle(null);
+}
+
+/** Titre de l'onglet : rend l'historique et les favoris lisibles. */
+function _setDocumentTitle(taskTitle) {
+  document.title = taskTitle ? `${taskTitle} — gtgWeb` : 'gtgWeb';
+}
+
+window.addEventListener('hashchange', _applyRoute);
 
 function _applyFilters(tasks) {
   const { activeTag } = App.config;
@@ -360,31 +471,17 @@ async function handleAction(action, payload) {
     }
 
     // ── Éditeur ─────────────────────────────────────────────────────────────
+    // Ouvrir une tache, c'est changer d'adresse : le routeur fait le reste.
     case 'openTask': {
-      App.pendingTask = { ...payload.task };
-      // Brouillon local non confirme par le serveur : on le signale sans rien
-      // decider a la place de l'operateur (piece 2 de la sauvegarde continue).
-      const draft = _draftLoad(payload.task);
-      App.pendingDraft = _draftDiffers(draft, payload.task) ? draft : null;
-      if (!App.pendingDraft) _draftClear(payload.task);
-      // Ouvrir une tache ne la sauvegarde pas : on part d'un compteur neuf
-      // (GTG fait de meme, cf. le garde-fou get_editable() de light_save).
-      App.autosave = { lastSave: Date.now(), pending: false, dirty: false };
-      UI.renderEditor(payload.task);
+      _go('#/task/' + encodeURIComponent(payload.task.uid));
       break;
     }
 
     case 'newTask': {
-      const uid  = Builder.generateUID();
-      const task = {
-        uid, title: '', status: 'NEEDS-ACTION', description: '',
-        tags: [], due: null, start: null, fuzzy: null,
-        children: [], parent: null, sequence: 0, etag: '', raw: '',
-      };
-      App.pendingTask  = { ...task };
-      App.pendingDraft = null;   // une tache neuve n'a pas de passe
-      App.autosave = { lastSave: Date.now(), pending: false, dirty: false };
-      UI.renderEditor(task);
+      // Une tache neuve n'a pas encore d'adresse propre : #/new porte l'etat
+      // « saisie en cours », le Precedent du navigateur ramene a la liste.
+      App.pendingTask = null;   // forcer une tache vierge, pas la precedente
+      _go(ROUTE_NEW);
       break;
     }
 
@@ -507,25 +604,22 @@ async function handleAction(action, payload) {
 
         if (!task.title) {
           // Titre vide → abandon
-          App.pendingTask = null;
-          UI.closeEditor();
+          _go('#/');
           break;
         }
 
         // Rien n'a change : ni ecriture, ni rendu. Fermeture immediate.
         if (!App.autosave.dirty) {
-          App.pendingTask = null;
-          UI.closeEditor();
+          _go('#/');
           break;
         }
         // Rendu optimiste : on affiche et on ferme tout de suite, le reseau
         // suit en arriere-plan. Le brouillon local couvre le risque d'echec.
         _refreshLocal(task);
         App.autosave.dirty = false;
-        App.pendingTask    = null;
         _saveInBackground(task);
       }
-      UI.closeEditor();
+      _go('#/');
       break;
     }
 
@@ -534,8 +628,7 @@ async function handleAction(action, payload) {
       // Renoncement explicite : le brouillon local n'a plus lieu d'etre.
       if (App.pendingTask) _draftClear(App.pendingTask);
       App.autosave.dirty = false;
-      App.pendingTask = null;
-      UI.closeEditor();
+      _go('#/');
       break;
     }
 
@@ -552,8 +645,7 @@ async function handleAction(action, payload) {
     case 'reopenTask': {
       const updated = { ...payload.task, status: 'NEEDS-ACTION' };
       await _saveTask(updated);
-      App.pendingTask = null;
-      UI.closeEditor();
+      _go('#/');
       await loadAndRender();
       break;
     }
@@ -562,8 +654,7 @@ async function handleAction(action, payload) {
     case 'dismissTask': {
       const updated = { ...payload.task, status: 'CANCELLED' };
       await _saveTask(updated);
-      App.pendingTask = null;
-      UI.closeEditor();
+      _go('#/');
       await loadAndRender();
       break;
     }
@@ -576,8 +667,7 @@ async function handleAction(action, payload) {
       try {
         await CalDAV.remove(task.uid, task.etag, task.href);
         App.index.delete(task.uid);
-        App.pendingTask = null;
-        UI.closeEditor();
+        _go('#/');
         UI.setSyncState('done');
         await loadAndRender();
       } catch (e) {

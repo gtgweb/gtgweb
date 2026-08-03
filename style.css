@@ -375,6 +375,10 @@ a { text-decoration: none; color: inherit; }
 .task-item { display: flex; flex-direction: column; }
 
 .task-row {
+  /* Element <a> depuis le routage par URL : neutraliser le style de lien,
+     l'apparence de la ligne ne doit pas changer. */
+  color: inherit;
+  text-decoration: none;
   display: flex;
   align-items: flex-start;
   gap: var(--space-xs);
