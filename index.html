@@ -4,6 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="Getting Things GNOME dans votre navigateur. PWA CalDAV libre et auto-hébergeable." />
+  <!-- Le site declare gerer les deux schemas : sans cette declaration, Chrome
+       Android considere la page comme non consciente du sombre et applique son
+       assombrissement automatique PAR-DESSUS le CSS, rendant le theme clair
+       force inoperant sur mobile. -->
+  <meta name="color-scheme" content="light dark" />
+  <!-- Valeur de depart ; applyTheme() la reajuste selon le theme actif. -->
   <meta name="theme-color" content="#1e1e2e" />
 
   <title>gtgWeb</title>

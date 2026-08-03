@@ -58,6 +58,10 @@
   --date-someday: var(--blue);
   --date-later:   var(--text-muted);
   --date-now:     var(--red);
+
+  /* Le site gere les deux schemas. Indispensable sur mobile : sans cette
+     declaration, Chrome Android s'autorise a assombrir la page lui-meme. */
+  color-scheme: light dark;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -129,6 +133,8 @@ a { text-decoration: none; color: inherit; }
 .btn--ghost:hover { background: var(--bg-tertiary); color: var(--text); }
 .btn--ghost.btn--active { color: var(--accent); }
 
+.btn--primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn--primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 .btn--success { background: var(--green);  color: #fff; border-color: var(--green);  }
 .btn--danger  { background: var(--red);    color: #fff; border-color: var(--red);    }
 .btn--icon    { padding: 4px 8px; background: transparent; border: none; color: var(--text-muted); }
@@ -505,8 +511,22 @@ a { text-decoration: none; color: inherit; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
   border-bottom: 1px solid var(--border-light);
+}
+
+/* Titre centre dans l'en-tete, facon GTG. Il occupe l'espace restant entre
+   l'action d'etat (gauche) et la croix de fermeture (droite). */
+.editor-header-title {
+  flex: 1;
+  text-align: center;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .editor-title {
@@ -616,6 +636,38 @@ a { text-decoration: none; color: inherit; }
   background: var(--bg-tertiary);
   color: var(--text-muted);
 }
+
+/* Menu ⋮ de l'en-tete editeur (Abandonner, Supprimer), facon GTG. */
+.editor-menu { position: relative; }
+
+.editor-menu-popup {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  min-width: 160px;
+  padding: 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .18);
+}
+.editor-menu-popup.hidden { display: none; }
+
+.editor-menu-item {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.editor-menu-item:hover { background: var(--bg-tertiary); }
+.editor-menu-item--danger { color: var(--red); }
 
 .editor-actions {
   display: flex;

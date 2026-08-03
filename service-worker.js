@@ -10,7 +10,7 @@
  * @link    https://github.com/gtgweb/gtgweb
  */
 
-const CACHE_NAME = 'gtgweb-v2';
+const CACHE_NAME = 'gtgweb-v3';
 
 // Fichiers statiques mis en cache à l'installation (ordre = index.html).
 const STATIC_FILES = [

@@ -14,7 +14,18 @@ const App = {
   config:       {},
   pendingTask:  null,
   calendarName: '',   // displayname du calendrier actif (ex: 'gtg')
+
+  // Sauvegarde continue facon GTG (cf. editor.py light_save / SAVETIME=7).
+  autosave: {
+    lastSave: 0,      // horodatage du dernier PUT reussi (ms)
+    pending:  false,  // un PUT est en cours
+    dirty:    false,  // des modifications non confirmees par le serveur
+  },
 };
+
+// Delai minimal entre deux ecritures reseau, en ms. Meme valeur que GTG 0.7
+// (GnomeConfig.SAVETIME = 7 s) : un throttle, pas un debounce.
+const SAVETIME_MS = 7000;
 
 // Exposer App aux autres modules (ui.js lit App.index, App.richField).
 // app.js est charge en dernier, les autres modules accedent via window.App.
@@ -68,6 +79,23 @@ async function loadAndRender() {
     // rien ici (pas de sync-indicator sur l'ecran de chargement).
     UI.renderLoadError('Impossible de charger les tâches. Vérifiez votre connexion, puis réessayez.');
   }
+}
+
+/**
+ * Reconstruit l'affichage a partir des donnees deja en memoire, sans aucun
+ * aller-retour reseau. La tache sauvegardee est reinjectee dans App.all, puis
+ * l'arbre est recalcule localement. Evite un PROPFIND complet a chaque
+ * fermeture d'editeur, qui rendait l'appli poussive sur mobile.
+ */
+function _refreshLocal(task) {
+  const i = App.all.findIndex(t => t.uid === task.uid);
+  const merged = { ...task };
+  if (i >= 0) App.all[i] = merged;
+  else        App.all.push(merged);
+
+  const { index } = Tree.build(App.all);
+  App.index = index;
+  renderCurrentView();
 }
 
 function _applyFilters(tasks) {
@@ -252,6 +280,9 @@ async function handleAction(action, payload) {
     // ── Éditeur ─────────────────────────────────────────────────────────────
     case 'openTask': {
       App.pendingTask = { ...payload.task };
+      // Ouvrir une tache ne la sauvegarde pas : on part d'un compteur neuf
+      // (GTG fait de meme, cf. le garde-fou get_editable() de light_save).
+      App.autosave = { lastSave: Date.now(), pending: false, dirty: false };
       UI.renderEditor(payload.task);
       break;
     }
@@ -264,6 +295,7 @@ async function handleAction(action, payload) {
         children: [], parent: null, sequence: 0, etag: '', raw: '',
       };
       App.pendingTask = { ...task };
+      App.autosave = { lastSave: Date.now(), pending: false, dirty: false };
       UI.renderEditor(task);
       break;
     }
@@ -280,6 +312,7 @@ async function handleAction(action, payload) {
         App.pendingTask.description = text;
         App.pendingTask.tags        = [...new Set([...task.tags, ...parsed.tags])];
         App.pendingTask.subtasks    = parsed.subtasks;
+        await _lightSave();
       }
       break;
     }
@@ -289,11 +322,14 @@ async function handleAction(action, payload) {
       if (App.pendingTask) {
         if (field === 'due') { App.pendingTask.fuzzy = fuzzy || null; App.pendingTask.due = date; }
         else { App.pendingTask.start = date; }
+        await _lightSave();
       }
       break;
     }
 
-    // ── Sauvegarder et fermer ───────────────────────────────────────────────
+    // ── Fermer l'editeur ────────────────────────────────────────────────────
+    // Sauvegarde forcee, sans condition de delai (GTG fait de meme a la
+    // fermeture : light_save n'est pas garantie d'avoir ecrit, cf. GTG #1138).
     case 'saveAndClose': {
       if (App.pendingTask) {
         const task = App.pendingTask;
@@ -315,14 +351,18 @@ async function handleAction(action, payload) {
           break;
         }
 
-        const ok = await _saveTask(task);
-        if (ok === false) {
-          // Echec de sauvegarde (ex. reseau mobile coupe) : on GARDE l'editeur
-          // ouvert et la saisie intacte pour reessayer. Message deja affiche.
+        // Rien n'a change : ni ecriture, ni rendu. Fermeture immediate.
+        if (!App.autosave.dirty) {
+          App.pendingTask = null;
+          UI.closeEditor();
           break;
         }
-        App.pendingTask = null;
-        await loadAndRender();
+        // Rendu optimiste : on affiche et on ferme tout de suite, le reseau
+        // suit en arriere-plan. Le brouillon local couvre le risque d'echec.
+        _refreshLocal(task);
+        App.autosave.dirty = false;
+        App.pendingTask    = null;
+        _saveInBackground(task);
       }
       UI.closeEditor();
       break;
@@ -330,6 +370,9 @@ async function handleAction(action, payload) {
 
     // ── Annuler sans sauvegarder ────────────────────────────────────────────
     case 'cancelEdit': {
+      // Renoncement explicite : le brouillon local n'a plus lieu d'etre.
+      if (App.pendingTask) _draftClear(App.pendingTask);
+      App.autosave.dirty = false;
       App.pendingTask = null;
       UI.closeEditor();
       break;
@@ -400,8 +443,107 @@ async function _finalizeLogin(loginPayload, calendarName, calendarSegment, persi
   await loadAndRender();
 }
 
-async function _saveTask(task) {
-  UI.setSyncState('syncing');
+// ── Sauvegarde continue ───────────────────────────────────────────────────
+// Modele GTG 0.7 : light_save() est appelee a chaque passe du parseur mais
+// n'ecrit que si SAVETIME est ecoule depuis la derniere ecriture reussie.
+// Specificite gtgWeb : chaque ecriture est un PUT reseau, donc on depose
+// d'abord un brouillon local (rien ne se perd si l'onglet meurt ou si le
+// reseau tombe), purge seulement apres confirmation du serveur.
+
+function _draftKey(task) {
+  return 'gtgweb:draft:' + (task.href || task.uid);
+}
+
+function _draftSave(task) {
+  try {
+    localStorage.setItem(_draftKey(task), JSON.stringify({
+      uid: task.uid, href: task.href || '', title: task.title || '',
+      description: task.description || '', tags: task.tags || [],
+      due: task.due || null, start: task.start || null, fuzzy: task.fuzzy || null,
+      savedAt: Date.now(),
+    }));
+  } catch (e) {
+    // Quota plein ou stockage indisponible : on continue, le PUT reste la voie normale.
+    console.warn('gtgWeb : brouillon local non ecrit', e);
+  }
+}
+
+function _draftClear(task) {
+  try { localStorage.removeItem(_draftKey(task)); } catch (e) { /* sans effet */ }
+}
+
+/**
+ * Appelee a chaque modification de l'editeur. Depose le brouillon local
+ * immediatement, puis n'ecrit sur le serveur que si SAVETIME_MS est ecoule.
+ * Silencieuse : aucun indicateur en regime normal (conformite GTG).
+ */
+async function _lightSave() {
+  const task = App.pendingTask;
+  if (!task || !task.title) return;     // jamais d'ecriture d'une tache sans titre
+
+  _draftSave(task);
+  App.autosave.dirty = true;
+
+  if (App.autosave.pending) return;                          // un PUT court deja
+  if (Date.now() - App.autosave.lastSave < SAVETIME_MS) return;
+
+  await _flushSave({ silent: true });
+}
+
+/**
+ * Ecrit sur le serveur sans condition de delai. En mode silencieux, un echec
+ * ne dit rien : le brouillon reste et la passe suivante reessaiera.
+ * @returns {boolean} true si le serveur a confirme
+ */
+async function _flushSave({ silent = false, task = null } = {}) {
+  task = task || App.pendingTask;
+  if (!task || !task.title) return false;
+
+  // Rien n'a change depuis la derniere ecriture confirmee : pas de PUT.
+  // GTG force save() a la fermeture parce que son ecriture est locale et
+  // instantanee ; chez nous c'est un GET d'ETag suivi d'un PUT, donc fermer
+  // une tache qu'on n'a fait que consulter doit rester immediat.
+  if (!App.autosave.dirty) return true;
+
+  App.autosave.pending = true;
+  try {
+    const ok = await _saveTask(task, { silent });
+    if (ok !== false) {
+      App.autosave.lastSave = Date.now();
+      App.autosave.dirty    = false;
+      _draftClear(task);
+      return true;
+    }
+    return false;
+  } finally {
+    App.autosave.pending = false;
+  }
+}
+
+/**
+ * Ecrit sur le serveur SANS bloquer l'interface. L'affichage est deja a jour
+ * (rendu optimiste) : on ferme l'editeur immediatement et la synchronisation
+ * suit. Le brouillon local reste en place tant que le serveur n'a pas confirme,
+ * donc un echec ne perd rien ; il est signale a l'operateur.
+ */
+function _saveInBackground(task) {
+  _draftSave(task);
+  _flushSave({ silent: true, task })
+    .then(ok => {
+      if (ok === false) {
+        UI.setSyncState('error',
+          'Tâche affichée mais non synchronisée. Elle est conservée en local.');
+      }
+    })
+    .catch(e => {
+      console.error('gtgWeb : sauvegarde en arriere-plan echouee', e);
+      UI.setSyncState('error',
+        'Tâche affichée mais non synchronisée. Elle est conservée en local.');
+    });
+}
+
+async function _saveTask(task, { silent = false } = {}) {
+  if (!silent) UI.setSyncState('syncing');
   try {
     const ical = task.raw
       ? Builder.updateVTODO(task, App.calendarName)
@@ -417,18 +559,31 @@ async function _saveTask(task) {
 
     if (result.conflict) {
       console.warn(`gtgWeb : conflit sur ${task.uid}`);
+      // En pleine frappe, on ne recharge pas sous les doigts de l'operateur :
+      // on laisse le brouillon en place, la fermeture tranchera.
+      if (silent) return false;
       UI.setSyncState('error', 'Conflit — rechargement…');
       await loadAndRender();
       return true;   // conflit géré (version serveur rechargée), pas un échec à re-signaler
     }
 
     App.index.set(task.uid, { ...task, raw: ical, sequence: (task.sequence || 0) + 1 });
-    UI.setSyncState('done');
+    // Le raw et la sequence viennent de changer : la tache en cours d'edition
+    // doit suivre, sinon la sauvegarde suivante repartirait d'un raw perime.
+    if (App.pendingTask && App.pendingTask.uid === task.uid) {
+      App.pendingTask.raw      = ical;
+      App.pendingTask.sequence = (task.sequence || 0) + 1;
+    }
+    if (!silent) UI.setSyncState('done');
     return true;
 
   } catch (e) {
     console.error('gtgWeb : erreur sauvegarde', e);
-    UI.setSyncState('error', 'Erreur de sauvegarde. Vos modifications ne sont pas perdues, réessayez.');
+    // En mode silencieux on ne crie pas : le brouillon local tient le contenu
+    // et la passe suivante reessaiera. On ne parle qu'a la fermeture.
+    if (!silent) {
+      UI.setSyncState('error', 'Erreur de sauvegarde. Vos modifications ne sont pas perdues, réessayez.');
+    }
     return false;
   }
 }

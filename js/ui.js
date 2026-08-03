@@ -239,6 +239,26 @@ const UI = (() => {
     root.classList.remove('theme-light', 'theme-dark');
     if (theme === 'light') root.classList.add('theme-light');
     if (theme === 'dark')  root.classList.add('theme-dark');
+    _applyThemeColor(theme);
+  }
+
+  /**
+   * Accorde la meta theme-color (barre systeme du navigateur mobile) au theme
+   * actif. Sans cela elle reste figee sur la valeur sombre du HTML, meme en
+   * theme clair force.
+   */
+  function _applyThemeColor(theme) {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) return;
+    const LIGHT = '#ffffff';
+    const DARK  = '#1e1e2e';
+    let effective = theme;
+    if (theme !== 'light' && theme !== 'dark') {
+      effective = window.matchMedia &&
+                  window.matchMedia('(prefers-color-scheme: dark)').matches
+                  ? 'dark' : 'light';
+    }
+    meta.setAttribute('content', effective === 'dark' ? DARK : LIGHT);
   }
 
   function closeSettings() {
@@ -535,8 +555,29 @@ const UI = (() => {
     panel.innerHTML = `
       <div class="editor">
         <header class="editor-header">
-          <button class="btn btn--secondary btn--small" id="btn-save-editor">← Sauvegarder</button>
-          <button class="btn btn--ghost btn--small"     id="btn-cancel-editor">✕ Annuler</button>
+          <!-- Clone GTG : action d'etat a gauche, titre au centre, croix a droite.
+               Pas de bouton Sauvegarder ni Annuler : l'ecriture est continue,
+               la croix ferme en enregistrant (seul chemin, comme dans GTG). -->
+          ${task.status === 'COMPLETED' || task.status === 'CANCELLED'
+            ? `<button class="btn btn--success btn--small" id="btn-reopen">Rouvrir</button>`
+            : `<button class="btn btn--primary btn--small" id="btn-done">Marquer comme fait</button>`
+          }
+          <span class="editor-header-title" id="editor-header-title">${_escape(task.title || 'Nouvelle tâche')}</span>
+          <div class="editor-menu">
+            <button class="btn btn--icon" id="btn-editor-menu" title="Plus d'actions"
+                    aria-label="Plus d'actions" aria-haspopup="true" aria-expanded="false">⋮</button>
+            <div class="editor-menu-popup hidden" id="editor-menu-popup" role="menu">
+              ${task.status === 'COMPLETED' || task.status === 'CANCELLED'
+                ? ''
+                : `<button class="editor-menu-item" id="btn-dismiss" role="menuitem">Abandonner</button>`
+              }
+              ${!isNew
+                ? `<button class="editor-menu-item editor-menu-item--danger" id="btn-delete" role="menuitem">Supprimer</button>`
+                : ''
+              }
+            </div>
+          </div>
+          <button class="btn btn--icon" id="btn-save-editor" title="Fermer" aria-label="Fermer">✕</button>
         </header>
 
         <div class="editor-dates">
@@ -566,14 +607,6 @@ const UI = (() => {
         <div class="editor-tokens" id="editor-tokens"></div>
         -->
 
-        <div class="editor-actions">
-          ${task.status === 'COMPLETED' || task.status === 'CANCELLED'
-            ? `<button class="btn btn--success" id="btn-reopen">↺ Rouvrir</button>`
-            : `<button class="btn btn--success" id="btn-done">✓ Marquer comme fait</button>
-               <button class="btn btn--warning" id="btn-dismiss">⊘ Abandonner</button>`
-          }
-          ${!isNew ? `<button class="btn btn--danger" id="btn-delete">🗑 Supprimer</button>` : ''}
-        </div>
       </div>
     `;
 
@@ -585,6 +618,9 @@ const UI = (() => {
         // 1re ligne = titre ; le reste = description (le titre ne doit PAS
         // se recopier dans la note, sinon il s'empile a chaque sauvegarde).
         const newTitle = (lines[0] || '').trim();
+        // Le titre de l'en-tete suit la frappe, comme dans GTG.
+        const hdr = document.getElementById('editor-header-title');
+        if (hdr) hdr.textContent = newTitle || 'Nouvelle tâche';
         const body = lines.slice(1).join('\n');
         const result = Editor.parse(body);
         _onAction('editorChange', { uid: task.uid, task, newTitle, text: body, parsed: result });
@@ -635,12 +671,9 @@ const UI = (() => {
       _onAction('editorDateChange', { uid: task.uid, task, field: 'due', fuzzy: null, date });
     });
 
-    // Boutons
+    // Boutons. La croix est le seul chemin de fermeture : elle enregistre.
     document.getElementById('btn-save-editor').addEventListener('click', () =>
       _onAction('saveAndClose', {}));
-
-    document.getElementById('btn-cancel-editor').addEventListener('click', () =>
-      _onAction('cancelEdit', {}));
 
     if (task.status === 'COMPLETED' || task.status === 'CANCELLED') {
       document.getElementById('btn-reopen').addEventListener('click', () => {
@@ -651,12 +684,27 @@ const UI = (() => {
         _onAction('toggleDone', { uid: task.uid, task });
       });
       document.getElementById('btn-dismiss').addEventListener('click', () => {
+        _closeEditorMenu();
         _onAction('dismissTask', { uid: task.uid, task });
       });
     }
 
+    // Menu ⋮ : ouverture au clic, fermeture au clic exterieur ou a Echap.
+    const menuBtn   = document.getElementById('btn-editor-menu');
+    const menuPopup = document.getElementById('editor-menu-popup');
+    if (menuBtn && menuPopup) {
+      menuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const open = menuPopup.classList.toggle('hidden');
+        menuBtn.setAttribute('aria-expanded', String(!open));
+      });
+      document.addEventListener('click', _closeEditorMenu);
+      document.addEventListener('keydown', _editorMenuKeydown);
+    }
+
     if (!isNew) {
       document.getElementById('btn-delete').addEventListener('click', () => {
+        _closeEditorMenu();
         if (confirm(`Supprimer définitivement "${task.title}" ?`)) {
           _onAction('deleteTask', { uid: task.uid, task });
         }
@@ -664,9 +712,26 @@ const UI = (() => {
     }
   }
 
+  // ── Menu ⋮ de l'editeur ───────────────────────────────────────────────────
+
+  function _closeEditorMenu() {
+    const popup = document.getElementById('editor-menu-popup');
+    const btn   = document.getElementById('btn-editor-menu');
+    if (popup) popup.classList.add('hidden');
+    if (btn)   btn.setAttribute('aria-expanded', 'false');
+  }
+
+  function _editorMenuKeydown(e) {
+    if (e.key === 'Escape') _closeEditorMenu();
+  }
+
   function closeEditor() {
     const panel = document.getElementById('editor-panel');
     if (panel) panel.classList.add('hidden');
+    // Les ecouteurs globaux du menu ne doivent pas survivre a l'editeur.
+    document.removeEventListener('click', _closeEditorMenu);
+    document.removeEventListener('keydown', _editorMenuKeydown);
+    _closeEditorMenu();
   }
 
   function _renderTokens(container, tokens) {
