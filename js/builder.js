@@ -174,6 +174,18 @@ const Builder = (() => {
    * - DTSTART : date réelle uniquement, jamais fuzzy
    */
   function _appendDates(lines, task) {
+    // « Maintenant » n'est PAS un horizon dans GTG : la chaine 'now' y devient
+    // l'instant present des la construction (dates.py:154, « dropped falsly
+    // fuzzy NOW »), et la serialisation CalDAV de GTG ne connait que 'soon' et
+    // 'someday'. Ecrire GTGFUZZY=now produirait un aller-retour infidele :
+    // GTG le convertirait en date figee a l'heure de l'import.
+    // Cote gtgWeb le bouton reste, c'est un raccourci vers aujourd'hui.
+    if (task.fuzzy === 'now') {
+      lines.push(`DUE;VALUE=DATE:${dateToIcal(new Date())}`);
+      if (task.start) lines.push(`DTSTART;VALUE=DATE:${dateToIcal(task.start)}`);
+      return;
+    }
+
     if (task.fuzzy) {
       // Convention GTG : parametre GTGFUZZY sur la ligne DUE (interop desktop).
       // Sentinelle 2099 conservee comme date reelle lisible (GTG lit le parametre).

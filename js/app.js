@@ -518,10 +518,23 @@ async function handleAction(action, payload) {
     }
 
     case 'editorDateChange': {
-      const { field, fuzzy, date } = payload;
+      const { field, date } = payload;
+      let fuzzy = payload.fuzzy;
+      // « Maintenant » est un raccourci vers aujourd'hui, pas un horizon :
+      // GTG resout 'now' en date des la saisie. On fait de meme ici pour que
+      // l'affichage soit juste immediatement, sans etat transitoire.
+      let dueDate = date;
+      if (field === 'due' && fuzzy === 'now') {
+        fuzzy   = null;
+        dueDate = new Date();
+      }
       if (App.pendingTask) {
-        if (field === 'due') { App.pendingTask.fuzzy = fuzzy || null; App.pendingTask.due = date; }
-        else { App.pendingTask.start = date; }
+        if (field === 'due') {
+          App.pendingTask.fuzzy = fuzzy || null;
+          App.pendingTask.due   = dueDate;
+        } else {
+          App.pendingTask.start = dueDate;
+        }
         await _lightSave();
       }
       break;

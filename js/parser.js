@@ -138,6 +138,16 @@ const Parser = (() => {
         if (priority === 9) fuzzy = 'someday';
       }
 
+      // « now » n'est pas un horizon : GTG le resout en date des la lecture
+      // (dates.py:154). Des fichiers ecrits par les versions precedentes de
+      // gtgWeb portent encore GTGFUZZY=now ; on les interprete comme GTG.
+      // Conversion en memoire seulement : le fichier sera normalise a la
+      // prochaine sauvegarde de la tache, jamais par surprise.
+      if (fuzzy && String(fuzzy).toLowerCase() === 'now') {
+        fuzzy = null;
+        if (!due) due = new Date();
+      }
+
       // Normalisation des tags — tableau sans @, sans espaces.
       // On met en quarantaine les catégories techniques DAV_* : ce sont des
       // marqueurs de calendrier (GTG desktop), jamais des tags utilisateur.
