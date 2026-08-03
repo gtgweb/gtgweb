@@ -29,7 +29,102 @@ const Tree = (() => {
    *   orphans: Object[],              // Tâches dont le parent est introuvable
    * }}
    */
-  function build(tasks) {
+  // ── Tri ───────────────────────────────────────────────────────────────────
+  //
+  // Modele GTG. Le tri s'applique a CHAQUE niveau de l'arbre (equivalent du
+  // Gtk.TreeListRowSorter) : les sous-taches sont ordonnees entre elles sous
+  // leur parent.
+  //
+  // Vues ouvertes et actionnables : tri par echeance (TaskDueSorter).
+  // Le point cle, contre-intuitif : GTG ne separe PAS les dates des horizons.
+  // Une date floue est convertie en date reelle AVANT comparaison
+  // (dates.py:202), donc les horizons s'intercalent parmi les dates :
+  //   Maintenant  -> aujourd'hui
+  //   Bientot     -> aujourd'hui + 15 jours
+  //   Un jour     -> aujourd'hui + 9999 jours
+  //   Sans date   -> aujourd'hui + 9999 jours (a egalite avec Un jour)
+  // Une tache datee dans 50 jours passe donc APRES « Bientot », pas avant.
+  //
+  // Vue fermees : tri par date de cloture, la plus recente en tete (GTG 0.6).
+
+  const FUZZY_DAYS = { soon: 15, someday: 9999 };
+  const NO_DATE_DAYS = 9999;
+  const DAY_MS = 86400000;
+
+  /**
+   * Valeur de comparaison d'une echeance, en millisecondes.
+   * On ne se sert JAMAIS de la sentinelle 20991231 ecrite dans le fichier
+   * (builder.js) : elle placerait tous les horizons en fin de liste.
+   */
+  function dueValue(task, now) {
+    const today = now === undefined ? Date.now() : now;
+
+    if (task && task.fuzzy) {
+      const f = String(task.fuzzy).toLowerCase();
+      // « Maintenant » n'est plus un horizon dans GTG 0.7 : il vaut la date
+      // du jour (cf. dates.py:130, « dropped falsly fuzzy NOW »).
+      if (f === 'now') return today;
+      const days = FUZZY_DAYS[f];
+      if (days !== undefined) return today + days * DAY_MS;
+      return today + NO_DATE_DAYS * DAY_MS;
+    }
+
+    if (task && task.due) {
+      const t = new Date(task.due).getTime();
+      if (!isNaN(t)) return t;
+    }
+
+    // Sans echeance : meme rang que « Un jour ».
+    return today + NO_DATE_DAYS * DAY_MS;
+  }
+
+  /**
+   * Comparateur par titre. Alphabetique, insensible a la casse et aux accents,
+   * ordre naturel sur les nombres (Tache 2 avant Tache 10). Sert de departage.
+   */
+  function compareByTitle(a, b) {
+    const ta = (a && a.title) ? a.title.trim() : '';
+    const tb = (b && b.title) ? b.title.trim() : '';
+    if (ta === '' && tb === '') return 0;
+    if (ta === '') return 1;
+    if (tb === '') return -1;
+    return ta.localeCompare(tb, 'fr', { sensitivity: 'base', numeric: true });
+  }
+
+  /** Comparateur par echeance, titre en departage. */
+  function compareByDue(a, b, now) {
+    const d = dueValue(a, now) - dueValue(b, now);
+    if (d !== 0) return d;
+    return compareByTitle(a, b);
+  }
+
+  /** Comparateur par date de cloture, la plus recente en tete. */
+  function compareByCompleted(a, b) {
+    const va = (a && a.completed) ? new Date(a.completed).getTime() : NaN;
+    const vb = (b && b.completed) ? new Date(b.completed).getTime() : NaN;
+    const ka = isNaN(va) ? null : va;
+    const kb = isNaN(vb) ? null : vb;
+    // Cloture inconnue : en fin de liste plutot qu'en tete.
+    if (ka === null && kb === null) return compareByTitle(a, b);
+    if (ka === null) return 1;
+    if (kb === null) return -1;
+    if (ka !== kb) return kb - ka;
+    return compareByTitle(a, b);
+  }
+
+  /**
+   * Trie une liste de taches sans modifier le tableau source.
+   * @param {Object[]} tasks
+   * @param {string}   view  'closed' -> date de cloture, sinon echeance
+   */
+  function sortTasks(tasks, view) {
+    const list = [...(tasks || [])];
+    if (view === 'closed') return list.sort(compareByCompleted);
+    const now = Date.now();
+    return list.sort((a, b) => compareByDue(a, b, now));
+  }
+
+  function build(tasks, view) {
     // Index UID → Task
     const index = new Map();
     for (const task of tasks) {
@@ -72,7 +167,9 @@ const Tree = (() => {
       }
     }
 
-    return { index, roots, orphans };
+    // Tri du premier niveau ; getChildren trie les niveaux inferieurs, donc
+    // l'ordre vaut dans tout l'arbre (equivalent du TreeListRowSorter).
+    return { index, roots: sortTasks(roots, view), orphans };
   }
 
   /**
@@ -81,10 +178,13 @@ const Tree = (() => {
    * @param {Map<string, Object>} index Index UID → Task
    * @returns {Object[]}
    */
-  function getChildren(task, index) {
-    return task.children
-      .map(uid => index.get(uid))
-      .filter(Boolean); // Ignorer les UIDs introuvables
+  function getChildren(task, index, view) {
+    return sortTasks(
+      task.children
+        .map(uid => index.get(uid))
+        .filter(Boolean), // Ignorer les UIDs introuvables
+      view
+    );
   }
 
   /**
@@ -223,6 +323,11 @@ const Tree = (() => {
     filterByTag,
     buildTagList,
     countUntagged,
+    sortTasks,
+    compareByTitle,
+    compareByDue,
+    compareByCompleted,
+    dueValue,
   };
 
 })();

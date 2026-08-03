@@ -636,7 +636,7 @@ const UI = (() => {
     if (hasChildren && isExpanded) {
       const childUl = document.createElement('ul');
       childUl.className = 'task-tree task-tree--children';
-      const children = Tree.getChildren(task, index);
+      const children = Tree.getChildren(task, index, _config.activeView);
       for (const child of children) {
         childUl.appendChild(_renderTaskItem(child, index, depth + 1));
       }

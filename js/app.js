@@ -15,6 +15,7 @@ const App = {
   pendingTask:  null,
   pendingDraft: null,   // brouillon local detecte a l'ouverture, en attente d'arbitrage
   drafts:       [],     // brouillons non synchronises, signales au-dessus de la liste
+  syncing:      new Set(),  // uid des taches dont le PUT est en vol
   calendarName: '',   // displayname du calendrier actif (ex: 'gtg')
 
   // Sauvegarde continue facon GTG (cf. editor.py light_save / SAVETIME=7).
@@ -240,7 +241,7 @@ function renderListOnly() {
   const { activeView } = App.config;
   let tasks = Tree.filterByView(App.all, App.index, activeView);
   tasks = _applyFilters(tasks);
-  const { roots } = Tree.build(tasks);
+  const { roots } = Tree.build(tasks, activeView);
   App.roots = roots;
   UI.renderTaskList(roots, App.index);
 }
@@ -259,7 +260,7 @@ function renderCurrentView() {
     closed:     Tree.filterByView(App.all, App.index, 'closed').length,
   };
 
-  const { roots } = Tree.build(tasks);
+  const { roots } = Tree.build(tasks, activeView);
   App.roots = roots;
 
   const openTasks = Tree.filterByView(App.all, App.index, 'open');
@@ -603,8 +604,12 @@ async function handleAction(action, payload) {
         }
 
         if (!task.title) {
-          // Titre vide → abandon
+          // Titre vide → abandon. Purger le brouillon eventuel : sans titre,
+          // rien ne sera jamais ecrit, le signaler n'aurait aucun sens.
+          _draftClear(task);
+          App.autosave.dirty = false;
           _go('#/');
+          _refreshDraftsBanner();
           break;
         }
 
@@ -629,13 +634,18 @@ async function handleAction(action, payload) {
       if (App.pendingTask) _draftClear(App.pendingTask);
       App.autosave.dirty = false;
       _go('#/');
+      // Le bandeau doit oublier ce brouillon tout de suite.
+      _refreshDraftsBanner();
       break;
     }
 
     // ── Marquer comme fait ──────────────────────────────────────────────────
     case 'toggleDone': {
       const { task } = payload;
-      const updated = { ...task, status: task.status === 'COMPLETED' ? 'NEEDS-ACTION' : 'COMPLETED' };
+      const base    = _freshestTask(task);
+      const updated = { ...base, status: base.status === 'COMPLETED' ? 'NEEDS-ACTION' : 'COMPLETED' };
+      _draftClear(updated);
+      App.autosave.dirty = false;
       await _saveTask(updated);
       await loadAndRender();
       break;
@@ -643,7 +653,9 @@ async function handleAction(action, payload) {
 
     // ── Rouvrir (NEEDS-ACTION) ──────────────────────────────────────────────
     case 'reopenTask': {
-      const updated = { ...payload.task, status: 'NEEDS-ACTION' };
+      const updated = { ..._freshestTask(payload.task), status: 'NEEDS-ACTION' };
+      _draftClear(updated);
+      App.autosave.dirty = false;
       await _saveTask(updated);
       _go('#/');
       await loadAndRender();
@@ -652,7 +664,9 @@ async function handleAction(action, payload) {
 
     // ── Ignorer (CANCELLED) ─────────────────────────────────────────────────
     case 'dismissTask': {
-      const updated = { ...payload.task, status: 'CANCELLED' };
+      const updated = { ..._freshestTask(payload.task), status: 'CANCELLED' };
+      _draftClear(updated);
+      App.autosave.dirty = false;
       await _saveTask(updated);
       _go('#/');
       await loadAndRender();
@@ -701,8 +715,15 @@ async function _finalizeLogin(loginPayload, calendarName, calendarSegment, persi
 // d'abord un brouillon local (rien ne se perd si l'onglet meurt ou si le
 // reseau tombe), purge seulement apres confirmation du serveur.
 
+// La cle d'un brouillon est l'UID, JAMAIS le href.
+//
+// Le href n'existe pas encore au moment ou une tache est creee, mais apparait
+// des le rechargement suivant : la meme tache changeait donc de cle en cours
+// de route. Le brouillon devenait introuvable a la lecture (aucune comparaison
+// proposee) et la purge visait une cle inexistante (bandeau perpetuel).
+// L'UID, lui, ne change jamais : c'est l'identite CalDAV de la tache.
 function _draftKey(task) {
-  return 'gtgweb:draft:' + (task.href || task.uid);
+  return 'gtgweb:draft:' + task.uid;
 }
 
 function _draftSave(task) {
@@ -727,7 +748,19 @@ function _draftSave(task) {
  */
 function _draftLoad(task) {
   try {
-    const raw = localStorage.getItem(_draftKey(task));
+    let raw = localStorage.getItem(_draftKey(task));
+    // Repli sur l'ancienne cle (href) pour les brouillons deja presents sur
+    // l'appareil, puis migration immediate vers la cle UID.
+    if (!raw && task.href) {
+      const legacy = 'gtgweb:draft:' + task.href;
+      raw = localStorage.getItem(legacy);
+      if (raw) {
+        try {
+          localStorage.setItem(_draftKey(task), raw);
+          localStorage.removeItem(legacy);
+        } catch (e) { /* sans effet */ }
+      }
+    }
     if (!raw) return null;
     const draft = JSON.parse(raw);
     return (draft && typeof draft === 'object') ? draft : null;
@@ -745,8 +778,18 @@ function _draftLoad(task) {
 function _draftDiffers(draft, task) {
   if (!draft) return false;
   const norm = (v) => (v === undefined || v === null) ? '' : String(v);
-  return norm(draft.title) !== norm(task.title) ||
-         norm(draft.description) !== norm(task.description);
+  // Comparer une date quelle que soit sa forme : le brouillon passe par JSON,
+  // donc une Date y devient une chaine ISO.
+  const day = (v) => {
+    if (v === undefined || v === null || v === '') return '';
+    const t = new Date(v).getTime();
+    return isNaN(t) ? String(v) : String(new Date(t).toISOString().slice(0, 10));
+  };
+  return norm(draft.title)       !== norm(task.title) ||
+         norm(draft.description) !== norm(task.description) ||
+         norm(draft.fuzzy)       !== norm(task.fuzzy) ||
+         day(draft.due)          !== day(task.due) ||
+         day(draft.start)        !== day(task.start);
 }
 
 /**
@@ -770,13 +813,32 @@ function _draftList() {
     return out;
   }
 
-  for (const key of keys) {
+  for (let key of keys) {
     let draft = null;
     try { draft = JSON.parse(localStorage.getItem(key)); } catch (e) { draft = null; }
     if (!draft || typeof draft !== 'object') {
       try { localStorage.removeItem(key); } catch (e) { /* sans effet */ }
       continue;
     }
+
+    // Rattraper les brouillons ecrits sous l'ancienne cle (href) : les
+    // reecrire sous l'UID pour qu'ils redeviennent lisibles et purgeables.
+    if (draft.uid) {
+      const wanted = 'gtgweb:draft:' + draft.uid;
+      if (key !== wanted) {
+        try {
+          if (!localStorage.getItem(wanted)) {
+            localStorage.setItem(wanted, JSON.stringify(draft));
+          }
+          localStorage.removeItem(key);
+          key = wanted;
+        } catch (e) { /* sans effet */ }
+      }
+    }
+
+    // Ecriture en vol : le brouillon va disparaitre dans un instant, ne pas
+    // alarmer l'operateur entre-temps.
+    if (draft.uid && App.syncing.has(draft.uid)) continue;
 
     const server = draft.uid ? App.index.get(draft.uid) : null;
     if (server && !_draftDiffers(draft, server)) {
@@ -797,7 +859,12 @@ function _draftList() {
 }
 
 function _draftClear(task) {
-  try { localStorage.removeItem(_draftKey(task)); } catch (e) { /* sans effet */ }
+  try {
+    localStorage.removeItem(_draftKey(task));
+    // Filet : effacer aussi une eventuelle entree sous l'ancienne cle href,
+    // sinon un brouillon fantome resterait signale par le bandeau.
+    if (task.href) localStorage.removeItem('gtgweb:draft:' + task.href);
+  } catch (e) { /* sans effet */ }
 }
 
 /**
@@ -824,6 +891,14 @@ async function _lightSave() {
  * @returns {boolean} true si le serveur a confirme
  */
 async function _flushSave({ silent = false, task = null } = {}) {
+  // Deux usages distincts, a ne surtout pas confondre :
+  //  - SESSION (task omis) : on ecrit la tache en cours d'edition, et l'etat
+  //    App.autosave decrit precisement cette session.
+  //  - DETACHE (task fourni) : on ecrit une tache dont l'editeur est deja
+  //    ferme. App.autosave appartient alors a une AUTRE tache, eventuellement
+  //    en cours de saisie : y toucher effacerait son drapeau et ferait perdre
+  //    ses modifications. On n'y touche pas, et on ne le consulte pas non plus.
+  const detached = task !== null;
   task = task || App.pendingTask;
   if (!task || !task.title) return false;
 
@@ -831,20 +906,23 @@ async function _flushSave({ silent = false, task = null } = {}) {
   // GTG force save() a la fermeture parce que son ecriture est locale et
   // instantanee ; chez nous c'est un GET d'ETag suivi d'un PUT, donc fermer
   // une tache qu'on n'a fait que consulter doit rester immediat.
-  if (!App.autosave.dirty) return true;
+  // En mode detache, l'appelant a deja tranche : on ecrit.
+  if (!detached && !App.autosave.dirty) return true;
 
-  App.autosave.pending = true;
+  if (!detached) App.autosave.pending = true;
   try {
     const ok = await _saveTask(task, { silent });
     if (ok !== false) {
-      App.autosave.lastSave = Date.now();
-      App.autosave.dirty    = false;
+      if (!detached) {
+        App.autosave.lastSave = Date.now();
+        App.autosave.dirty    = false;
+      }
       _draftClear(task);
       return true;
     }
     return false;
   } finally {
-    App.autosave.pending = false;
+    if (!detached) App.autosave.pending = false;
   }
 }
 
@@ -856,18 +934,54 @@ async function _flushSave({ silent = false, task = null } = {}) {
  */
 function _saveInBackground(task) {
   _draftSave(task);
-  _flushSave({ silent: true, task })
-    .then(ok => {
-      if (ok === false) {
-        UI.setSyncState('error',
-          'Tâche affichée mais non synchronisée. Elle est conservée en local.');
-      }
-    })
-    .catch(e => {
-      console.error('gtgWeb : sauvegarde en arriere-plan echouee', e);
+  App.syncing.add(task.uid);
+
+  const done = (ok) => {
+    App.syncing.delete(task.uid);
+    if (ok === false) {
       UI.setSyncState('error',
         'Tâche affichée mais non synchronisée. Elle est conservée en local.');
+    }
+    // Rafraichir le bandeau : sans cela, un brouillon purge apres coup
+    // resterait signale indefiniment (aucun rendu ne suit le PUT).
+    _refreshDraftsBanner();
+  };
+
+  _flushSave({ silent: true, task })
+    .then(done)
+    .catch(e => {
+      console.error('gtgWeb : sauvegarde en arriere-plan echouee', e);
+      done(false);
     });
+}
+
+/** Recense et redessine le seul bandeau, sans reconstruire la liste. */
+function _refreshDraftsBanner() {
+  App.drafts = _draftList();
+  UI.renderDraftsBanner(App.drafts);
+}
+
+/**
+ * Etat le plus a jour d'une tache avant un changement de statut.
+ *
+ * Les actions de statut recevaient la tache telle qu'elle etait a l'ouverture.
+ * Depuis la sauvegarde continue, l'operateur s'attend a ce que sa saisie soit
+ * conservee : marquer comme fait ne doit pas rembobiner le texte. On repart
+ * donc de l'edition en cours quand elle porte sur la meme tache, en relisant
+ * le champ riche pour n'en rien perdre.
+ */
+function _freshestTask(task) {
+  if (!App.pendingTask || App.pendingTask.uid !== task.uid) return task;
+  const current = { ...task, ...App.pendingTask };
+  const rich = App.richField;
+  if (rich && UI.isEditorOpen()) {
+    const { title, body } = rich.getTitleAndBody();
+    if (title) current.title = title;
+    current.description = body;
+    const parsed = Editor.parse(body);
+    current.tags = [...new Set([...(current.tags || []), ...parsed.tags])];
+  }
+  return current;
 }
 
 async function _saveTask(task, { silent = false } = {}) {
