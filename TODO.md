@@ -54,9 +54,64 @@ GTG-like et l'effet « wahoo », pour attirer des contributeurs par l'usage plut
 la complétude technique. Trois marches franchies dans la journée (sauvegarde continue,
 déverrouillage PIN, une tâche = une URL), plus le durcissement du proxy et le tri.
 
-Sept commits : `f613f4e` (ETag apparié) · `823dfc3` (sauvegarde continue, en-tête clone) ·
+Neuf commits : `f613f4e` (ETag apparié) · `823dfc3` (sauvegarde continue, en-tête clone) ·
 `203356b` (brouillons) · `60e817c` (PIN) · `15a7546` (routage URL) · `2dd0bb7` (proxy) ·
-`3d8384a` (tri GTG et corrections) · `c2295f6` (alignement des dates floues).
+`3d8384a` (tri GTG et corrections) · `c2295f6` (alignement des dates floues) ·
+`bbb3ea1` (docs) · `d8e804b` (marque-page).
+
+### Barre d'outils de l'éditeur (fin de séance)
+
+Écart constaté sur captures : GTG a six éléments dans sa barre, gtgWeb en avait deux.
+Icônes réelles de GTG 0.7 (`task_editor.ui`) : bouton texte « Add/Open Parent »,
+`format-indent-more-symbolic`, `user-bookmarks-symbolic`, `view-refresh-symbolic`,
+groupées en ensemble « linked ». Dessinées en SVG `currentColor`, jamais en emoji.
+
+- [x] **Marque-page (étiquettes)** — FAIT (`d8e804b`). Menu des étiquettes existantes avec
+      pastille et compteur, celles déjà portées montrées mais inertes, champ de création.
+      `RichField.addTag` place l'étiquette sous le titre ou complète la ligne de tags,
+      sans toucher au corps de la note.
+- [ ] **Sous-tâche** — TENTÉ ET ANNULÉ le 2026-08-03, voir ci-dessous.
+- [ ] **Ajouter / ouvrir une tâche parente** — même mécanique en sens inverse, plus un
+      sélecteur parmi les tâches existantes. À faire APRÈS les sous-tâches.
+- [ ] **Récurrence** — chantier à part entière : `RRULE` n'apparaît nulle part dans
+      `parser.js` ni `builder.js` (zéro occurrence). Lecture, écriture, clone du menu GTG,
+      régénération à la complétion. Séance dédiée, avec son propre vol de l'aigle.
+
+### Sous-tâches : tentative annulée, ce qui reste acquis
+
+Trois itérations, trois symptômes différents, retour à `d8e804b`. **La cause n'était pas
+technique mais conceptuelle** : la création de sous-tâche a été branchée sur le cycle
+d'édition sans repenser son articulation avec la sauvegarde continue et les brouillons.
+Chaque création marque le parent modifié, écrit un brouillon, déclenche un re-rendu qui
+déplace le curseur, et l'index se désaccorde des brouillons — trois systèmes qui se
+marchent dessus. Rapiécer aggravait au lieu de converger.
+
+Constats vérifiés dans le code de GTG, réutilisables tels quels à la reprise :
+
+- **CalDAV** : la hiérarchie passe UNIQUEMENT par `RELATED-TO`. GTG n'écrit jamais ses
+  marqueurs de sous-tâches dans `DESCRIPTION` — ce champ reçoit son `excerpt`, qui retire
+  tags de tête et marqueurs et tronque à 80 caractères (`tasks.py:311-316`).
+- **Stockage local GTG** : la sous-tâche est une ligne `{! uuid !}` à sa position dans le
+  texte (`taskview.py:805`), rendue en place comme ligne cliquable. Pas de zone à part —
+  la zone `rf-subtasks` héritée de « l'étape A » est un échafaudage, pas la cible.
+- **Moment de la matérialisation** : dans `process()`, le cycle de re-stylage
+  (`taskview.py:330`), au même rythme que la coloration des tags. GTG peut se le permettre
+  car sa ligne devient aussitôt un widget que l'on continue d'éditer ; sans édition en
+  place, matérialiser à chaque pause de frappe créerait une tâche par syllabe.
+- **Étiquettes** : une nouvelle sous-tâche hérite de celles du parent (`tasks.py:914`).
+
+À trancher AVANT de recoder : où la matérialisation s'insère dans le cycle
+brouillon → auto-save → rendu, et si la position de la sous-tâche dans le texte doit être
+conservée (elle ne l'est pas aujourd'hui, faute d'équivalent au marqueur `{! uuid !}`).
+
+### Hygiène serveur (fait le 2026-08-03)
+
+Constaté à l'occasion d'un dépôt FTP : `.git` était exposé à la racine publique — tout le
+code et l'historique étaient téléchargeables. Retiré, avec `.claude`, `htpasswd.txt`,
+`htaccess.txt` et `proxy.php.bak`. **Ne jamais téléverser `.git` ni `.claude`.**
+Reste `chemin.php` (23 octets, sonde de diagnostic) à supprimer si sans usage.
+
+---
 
 Trois défauts sérieux trouvés en relecture, tous corrigés dans `3d8384a` — à garder en
 tête, ils illustrent des pièges de conception plus que des étourderies :
